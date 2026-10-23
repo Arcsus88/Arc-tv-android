@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The Disney wordmark centred in the adaptive icon's 66dp safe zone. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item
+        android:width="62dp"
+        android:height="26dp"
+        android:gravity="center">
+        <bitmap
+            android:filter="true"
+            android:src="@drawable/logo_disney" />
+    </item>
+</layer-list>

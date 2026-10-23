@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The splash's deep blue; the poster wall fades in on the same colour. -->
+    <color name="night">#FF060B22</color>
+    <color name="icon_background">#FF0B1B4D</color>
+</resources>
