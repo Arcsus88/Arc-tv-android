@@ -44,19 +44,20 @@ android {
         applicationId = "com.arcsus.arcdisney"
         minSdk = 26
         targetSdk = 36
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = 2
+        versionName = "1.1.0"
         buildConfigField("String", "TMDB_API_KEY", "\"${tmdbApiKey.replace("\"", "")}\"")
     }
 
-    // One APK per CPU: libVLC and libtorrent are native, and a universal APK
-    // carries every ABI's copy. Phones want arm64-v8a; x86_64 is the emulator.
+    // libVLC and libtorrent are native, so each CPU type gets its own APK, plus
+    // one with both ARM builds: plenty of Android 9 devices run a 32-bit system
+    // on a 64-bit chip, and that one installs on either.
     splits {
         abi {
             isEnable = true
             reset()
-            include("arm64-v8a", "armeabi-v7a", "x86_64")
-            isUniversalApk = false
+            include("arm64-v8a", "armeabi-v7a")
+            isUniversalApk = true
         }
     }
 
@@ -100,6 +101,8 @@ android {
             // Compressed in the APK: libVLC and libtorrent are ~70 MB stored
             // uncompressed, about half that compressed, and this APK is sideloaded.
             useLegacyPackaging = true
+            // libVLC's AAR also carries x86 builds; no device this targets needs them.
+            excludes += listOf("lib/x86/**", "lib/x86_64/**")
         }
     }
 
@@ -160,7 +163,6 @@ dependencies {
     implementation(libs.libtorrent4j)
     implementation(libs.libtorrent4j.arm64)
     implementation(libs.libtorrent4j.arm)
-    implementation(libs.libtorrent4j.x64)
     libtorrentLinux(libs.libtorrent4j.linux)
 
     testImplementation(libs.junit)

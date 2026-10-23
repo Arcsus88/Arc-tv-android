@@ -20,8 +20,15 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.arcsus.arcdisney.playback.PlaybackController
 import com.arcsus.arcdisney.playback.PlaybackController.Phase
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 
-/** Splash, then the poster wall; a film's launch screen and player go on top. */
+private enum class Stage { SPLASH, SETUP, WALL }
+
+/**
+ * Splash, then (on first run, if the device isn't online) Wi-Fi setup, then
+ * the poster wall; the Wi-Fi screen, a film's launch screen and the player
+ * go on top.
+ */
 @Composable
 fun App(vm: DisneyViewModel) {
     val films by vm.films.collectAsStateWithLifecycle()
@@ -30,31 +37,60 @@ fun App(vm: DisneyViewModel) {
     val message by vm.message.collectAsStateWithLifecycle()
     val askForKey by vm.askForKey.collectAsStateWithLifecycle()
     val playback by vm.playback.ui.collectAsStateWithLifecycle()
+    val setupNeeded by vm.setupNeeded.collectAsStateWithLifecycle()
+    val wifi by vm.wifiState.collectAsStateWithLifecycle()
+    val wifiOpen by vm.wifiOpen.collectAsStateWithLifecycle()
 
-    // The splash plays through once, and holds until the catalogue is in.
+    // The splash plays through once, and holds until the catalogue and settings are in.
     var splashDone by rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(Unit) {
         if (!splashDone) delay(1_900)
+        vm.setupNeeded.first { it != null }
+        vm.onSplashDone()
         splashDone = true
     }
-    val showWall = splashDone && films != null
+    val stage = when {
+        !splashDone || films == null -> Stage.SPLASH
+        setupNeeded == true -> Stage.SETUP
+        else -> Stage.WALL
+    }
 
     Box(Modifier.fillMaxSize()) {
-        Crossfade(targetState = showWall, animationSpec = tween(700), label = "splash") { wall ->
-            if (wall) {
-                PosterWall(
+        Crossfade(targetState = stage, animationSpec = tween(700), label = "stage") { s ->
+            when (s) {
+                Stage.SPLASH -> SplashScreen()
+                Stage.SETUP -> WifiRoute(
+                    controller = vm.wifi,
+                    state = wifi,
+                    setup = true,
+                    onContinue = vm::finishSetup,
+                    onSkip = vm::finishSetup,
+                    onBack = {},
+                )
+                Stage.WALL -> PosterWall(
                     films = films.orEmpty(),
                     query = query,
                     onQuery = vm::setQuery,
                     update = update,
                     message = message,
+                    online = wifi.online,
                     onUpdate = vm::onUpdateClick,
-                    onUpdateLongPress = vm::onUpdateLongClick,
+                    onOpenWifi = vm::openWifi,
+                    onTmdbKey = vm::onTmdbKey,
                     onPlay = vm::play,
                 )
-            } else {
-                SplashScreen()
             }
+        }
+
+        AnimatedVisibility(visible = stage == Stage.WALL && wifiOpen, enter = fadeIn(), exit = fadeOut()) {
+            WifiRoute(
+                controller = vm.wifi,
+                state = wifi,
+                setup = false,
+                onContinue = vm::closeWifi,
+                onSkip = vm::closeWifi,
+                onBack = vm::closeWifi,
+            )
         }
 
         val ui = playback

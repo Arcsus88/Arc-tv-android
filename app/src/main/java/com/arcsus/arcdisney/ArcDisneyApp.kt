@@ -5,6 +5,7 @@ import android.content.Context
 import com.arcsus.arcdisney.data.CatalogueStore
 import com.arcsus.arcdisney.data.Settings
 import com.arcsus.arcdisney.torrent.TorrentEngine
+import com.arcsus.arcdisney.wifi.WifiController
 import okhttp3.OkHttpClient
 import java.io.File
 import java.util.concurrent.TimeUnit
@@ -23,6 +24,8 @@ class AppGraph(context: Context) {
     val store = CatalogueStore(File(context.filesDir, "catalogue.json")) { context.assets.open("disney.json") }
 
     val settings = Settings(context)
+
+    val wifi: WifiController by lazy { WifiController(context) }
 
     /** Films download to the cache while they play and are deleted after. */
     val engine: TorrentEngine by lazy { TorrentEngine(File(context.cacheDir, "torrents")) }

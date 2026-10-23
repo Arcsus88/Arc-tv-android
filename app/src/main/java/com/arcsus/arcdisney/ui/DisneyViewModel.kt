@@ -57,8 +57,39 @@ class DisneyViewModel(app: Application) : AndroidViewModel(app) {
 
     val playback = PlaybackController({ graph.engine }, viewModelScope)
 
+    val wifi = graph.wifi
+    val wifiState = wifi.state
+
+    /** Null until known: whether first-run setup (getting online) is still to do. */
+    private val _setupNeeded = MutableStateFlow<Boolean?>(null)
+    val setupNeeded: StateFlow<Boolean?> = _setupNeeded.asStateFlow()
+
+    /** The Wi-Fi screen opened from the wall (long-press menu or the offline pill). */
+    private val _wifiOpen = MutableStateFlow(false)
+    val wifiOpen: StateFlow<Boolean> = _wifiOpen.asStateFlow()
+
     init {
+        wifi.startMonitoring()
         viewModelScope.launch { catalogue.value = graph.store.load() }
+        viewModelScope.launch { _setupNeeded.value = !graph.settings.setupDone() }
+    }
+
+    /** A device that's already online when the splash ends has nothing to set up. */
+    fun onSplashDone() {
+        if (_setupNeeded.value == true && wifiState.value.online) finishSetup()
+    }
+
+    fun finishSetup() {
+        _setupNeeded.value = false
+        viewModelScope.launch { graph.settings.finishSetup() }
+    }
+
+    fun openWifi() {
+        _wifiOpen.value = true
+    }
+
+    fun closeWifi() {
+        _wifiOpen.value = false
     }
 
     fun setQuery(q: String) {
@@ -75,8 +106,8 @@ class DisneyViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    /** Long-pressing the update button: change (or add) the TMDB key. */
-    fun onUpdateLongClick() {
+    /** "TMDB key" in the update button's long-press menu: change (or add) the key. */
+    fun onTmdbKey() {
         if (_update.value == Update.Idle) _askForKey.value = true
     }
 
@@ -146,5 +177,6 @@ class DisneyViewModel(app: Application) : AndroidViewModel(app) {
 
     override fun onCleared() {
         playback.stop()
+        wifi.stopMonitoring()
     }
 }

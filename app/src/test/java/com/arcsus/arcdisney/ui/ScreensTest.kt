@@ -10,7 +10,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTextInput
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import coil.Coil
@@ -25,6 +28,9 @@ import com.arcsus.arcdisney.data.Film
 import com.arcsus.arcdisney.playback.PlaybackController
 import com.arcsus.arcdisney.torrent.StreamStats
 import com.arcsus.arcdisney.ui.theme.ArcDisneyTheme
+import com.arcsus.arcdisney.wifi.Security
+import com.arcsus.arcdisney.wifi.WifiNetwork
+import com.arcsus.arcdisney.wifi.WifiState
 import com.github.takahirom.roborazzi.captureRoboImage
 import kotlinx.coroutines.Dispatchers
 import org.junit.Before
@@ -93,8 +99,10 @@ class ScreensTest {
             onQuery = {},
             update = DisneyViewModel.Update.Idle,
             message = null,
+            online = true,
             onUpdate = {},
-            onUpdateLongPress = {},
+            onOpenWifi = {},
+            onTmdbKey = {},
             onPlay = {},
         )
     }
@@ -107,8 +115,10 @@ class ScreensTest {
             onQuery = {},
             update = DisneyViewModel.Update.Searching(done = 12, total = 31),
             message = "2 new films to watch.",
+            online = true,
             onUpdate = {},
-            onUpdateLongPress = {},
+            onOpenWifi = {},
+            onTmdbKey = {},
             onPlay = {},
         )
     }
@@ -176,5 +186,85 @@ class ScreensTest {
                 onScrubEnd = {},
             )
         }
+    }
+
+    private val nearby = listOf(
+        WifiNetwork("Home", 4, Security.PSK),
+        WifiNetwork("BT-Hub7-6Q2K", 3, Security.PSK),
+        WifiNetwork("Neighbours 5G", 2, Security.PSK),
+        WifiNetwork("Cafe Guest", 2, Security.OPEN),
+        WifiNetwork("Office", 1, Security.EAP),
+    )
+
+    @Composable
+    private fun Wifi(state: WifiState, setup: Boolean = true) = WifiScreen(
+        state = state,
+        setup = setup,
+        canConnectInApp = true,
+        onTurnOn = {},
+        onAllowLocation = {},
+        onConnect = { _, _, _ -> },
+        onOpenSystemWifi = {},
+        onContinue = {},
+        onSkip = {},
+        onBack = {},
+    )
+
+    private fun capture(name: String) {
+        compose.waitForIdle()
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.waitForIdle()
+        compose.onRoot().captureRoboImage("build/screens/$name.png")
+    }
+
+    @Test
+    fun wifiSetupList() = shoot("8-wifi-setup") {
+        Wifi(WifiState(enabled = true, networks = nearby, locationPermission = true))
+    }
+
+    @Test
+    fun wifiTypingAPassword() {
+        compose.setContent { ArcDisneyTheme { Wifi(WifiState(enabled = true, networks = nearby, locationPermission = true)) } }
+        compose.onNodeWithText("Home").performClick()
+        compose.waitForIdle()
+        compose.onNodeWithText("Password").performTextInput("correct horse")
+        capture("9-wifi-password")
+    }
+
+    @Test
+    fun wifiWrongPassword() {
+        compose.setContent {
+            ArcDisneyTheme {
+                Wifi(WifiState(enabled = true, networks = nearby, locationPermission = true, failed = "Home" to "Wrong password."))
+            }
+        }
+        compose.onNodeWithText("Home").performClick()
+        capture("10-wifi-wrong-password")
+    }
+
+    @Test
+    fun wifiConnected() = shoot("11-wifi-connected") {
+        Wifi(WifiState(enabled = true, connectedSsid = "Home", online = true, networks = nearby, locationPermission = true))
+    }
+
+    @Test
+    fun wifiLocationOff() = shoot("12-wifi-location-off") {
+        Wifi(WifiState(enabled = true, locationPermission = true, locationOn = false))
+    }
+
+    @Test
+    fun wallOffline() = shoot("13-wall-offline") {
+        PosterWall(
+            films = films,
+            query = "",
+            onQuery = {},
+            update = DisneyViewModel.Update.Idle,
+            message = null,
+            online = false,
+            onUpdate = {},
+            onOpenWifi = {},
+            onTmdbKey = {},
+            onPlay = {},
+        )
     }
 }

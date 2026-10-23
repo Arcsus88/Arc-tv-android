@@ -9,13 +9,21 @@ import kotlinx.coroutines.flow.first
 
 private val Context.settingsStore by preferencesDataStore(name = "settings")
 
-/** The TMDB key typed into the app, for builds made without one. */
+/** The TMDB key typed into the app (for builds made without one), and first-run setup. */
 class Settings(context: Context) {
     private val store = context.applicationContext.settingsStore
 
     private object Keys {
         val TMDB_KEY = stringPreferencesKey("tmdb_key")
         val SKIPPED_KEY = booleanPreferencesKey("skipped_tmdb_key")
+        val SETUP_DONE = booleanPreferencesKey("setup_done")
+    }
+
+    /** First-run setup (getting the device online) has been finished or skipped. */
+    suspend fun setupDone(): Boolean = store.data.first()[Keys.SETUP_DONE] == true
+
+    suspend fun finishSetup() {
+        store.edit { it[Keys.SETUP_DONE] = true }
     }
 
     suspend fun tmdbKey(): String = store.data.first()[Keys.TMDB_KEY].orEmpty()

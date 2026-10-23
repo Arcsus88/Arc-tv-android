@@ -50,13 +50,17 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -88,8 +92,10 @@ fun PosterWall(
     onQuery: (String) -> Unit,
     update: DisneyViewModel.Update,
     message: String?,
+    online: Boolean,
     onUpdate: () -> Unit,
-    onUpdateLongPress: () -> Unit,
+    onOpenWifi: () -> Unit,
+    onTmdbKey: () -> Unit,
     onPlay: (Film) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -113,7 +119,12 @@ fun PosterWall(
             ) {
                 SearchField(query, onQuery, Modifier.weight(1f))
                 Spacer(Modifier.width(10.dp))
-                UpdateButton(busy = update != DisneyViewModel.Update.Idle, onClick = onUpdate, onLongClick = onUpdateLongPress)
+                UpdateButton(
+                    busy = update != DisneyViewModel.Update.Idle,
+                    onClick = onUpdate,
+                    onOpenWifi = onOpenWifi,
+                    onTmdbKey = onTmdbKey,
+                )
             }
             UpdateProgress(update)
             if (films.isEmpty()) {
@@ -143,22 +154,22 @@ fun PosterWall(
             }
         }
 
-        AnimatedVisibility(
-            visible = message != null,
-            enter = fadeIn() + slideInVertically { it / 2 },
-            exit = fadeOut() + slideOutVertically { it / 2 },
-            modifier = Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(20.dp),
+        Column(
+            Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(20.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            Text(
-                message.orEmpty(),
-                color = Night.Text,
-                fontSize = 14.sp,
-                modifier = Modifier
-                    .clip(RoundedCornerShape(22.dp))
-                    .background(Color(0xF0182352))
-                    .border(1.dp, Night.Line, RoundedCornerShape(22.dp))
-                    .padding(horizontal = 18.dp, vertical = 12.dp),
-            )
+            AnimatedVisibility(
+                visible = message != null,
+                enter = fadeIn() + slideInVertically { it / 2 },
+                exit = fadeOut() + slideOutVertically { it / 2 },
+            ) {
+                Pill(message.orEmpty())
+            }
+            // A locked device has no Settings app: this is the way back to Wi-Fi.
+            AnimatedVisibility(visible = !online, enter = fadeIn(), exit = fadeOut()) {
+                Pill("No internet \u00B7 Wi-Fi settings", onClick = onOpenWifi)
+            }
         }
     }
 }
@@ -204,26 +215,60 @@ private fun SearchField(query: String, onQuery: (String) -> Unit, modifier: Modi
     }
 }
 
+@Composable
+private fun Pill(text: String, onClick: (() -> Unit)? = null) {
+    Text(
+        text,
+        color = Night.Text,
+        fontSize = 14.sp,
+        modifier = Modifier
+            .clip(RoundedCornerShape(22.dp))
+            .background(Color(0xF0182352))
+            .border(1.dp, Night.Line, RoundedCornerShape(22.dp))
+            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
+            .padding(horizontal = 18.dp, vertical = 12.dp),
+    )
+}
+
+/** Tap: look for new films. Long-press: the few settings a locked device needs. */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun UpdateButton(busy: Boolean, onClick: () -> Unit, onLongClick: () -> Unit) {
+private fun UpdateButton(busy: Boolean, onClick: () -> Unit, onOpenWifi: () -> Unit, onTmdbKey: () -> Unit) {
     val spin = rememberInfiniteTransition(label = "spin")
     val angle by spin.animateFloat(0f, 360f, infiniteRepeatable(tween(900, easing = LinearEasing), RepeatMode.Restart), label = "angle")
-    Box(
-        Modifier
-            .size(46.dp)
-            .clip(CircleShape)
-            .background(Night.Field)
-            .border(1.dp, Night.Line, CircleShape)
-            .combinedClickable(onClick = onClick, onLongClick = onLongClick, onClickLabel = "Look for new films"),
-        contentAlignment = Alignment.Center,
-    ) {
-        Icon(
-            Icons.Default.Refresh,
-            contentDescription = "Look for new films",
-            tint = Night.Text,
-            modifier = Modifier.size(22.dp).rotate(if (busy) angle else 0f),
-        )
+    var menu by remember { mutableStateOf(false) }
+    Box {
+        Box(
+            Modifier
+                .size(46.dp)
+                .clip(CircleShape)
+                .background(Night.Field)
+                .border(1.dp, Night.Line, CircleShape)
+                .combinedClickable(
+                    onClick = onClick,
+                    onLongClick = { menu = true },
+                    onClickLabel = "Look for new films",
+                    onLongClickLabel = "Settings",
+                ),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                Icons.Default.Refresh,
+                contentDescription = "Look for new films",
+                tint = Night.Text,
+                modifier = Modifier.size(22.dp).rotate(if (busy) angle else 0f),
+            )
+        }
+        DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+            DropdownMenuItem(text = { Text("Wi-Fi") }, onClick = {
+                menu = false
+                onOpenWifi()
+            })
+            DropdownMenuItem(text = { Text("TMDB key") }, onClick = {
+                menu = false
+                onTmdbKey()
+            })
+        }
     }
 }
 

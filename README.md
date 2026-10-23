@@ -6,6 +6,10 @@ into a wall of posters, with nothing above them but a search bar and an update
 button. Tapping a poster streams the film by torrent straight into VLC, which is
 built into the app, so playback never leaves it.
 
+It's made for a locked Android 9 device: the user never needs the Settings app,
+so the app gets the device onto Wi-Fi itself (see [Wi-Fi](#wi-fi)). It runs on
+Android 8.0 and later.
+
 ## How it works
 
 **The catalogue** is every Disney-branded and Pixar feature from TMDB (Walt Disney
@@ -69,6 +73,32 @@ uploads to, everyone sharing it, and they can see its IP address. In the UK
 that's how copyright letters from ISPs come about. The debrid route in Arc TV
 avoids this.
 
+## Wi-Fi
+
+On first run, after the splash, a device that isn't online gets a **Connect to
+Wi-Fi** screen: nearby networks with their signal, a padlock on the ones that
+need a password, and "Other network…" for one that hides its name. Tap a
+network, type the password, Connect. A wrong password says so; Continue unlocks
+once the device reaches the internet (Skip for now gets past it offline). A
+device already online at first run never sees the screen.
+
+Afterwards there's no Wi-Fi button in the header. Long-press the update button
+for a small menu (Wi-Fi, TMDB key), and when the device drops offline a
+"No internet · Wi-Fi settings" pill appears over the posters.
+
+How it joins (`wifi/WifiController.kt`): Android 9 lets an app add a saved
+network (`WifiManager.addNetwork`) and join it (`enableNetwork`), so this is
+the same as joining from Settings, and the device rejoins by itself after a
+restart. WPA/WPA2 Personal, WEP and open networks are supported; WPA3-only and
+work (802.1X) networks are shown but can't be joined. Android 10 and later only
+allow this to a device-owner app, so there the screen offers the system's Wi-Fi
+panel instead, unless the app is the device owner.
+
+Android 9 only lists nearby networks to an app with location permission, and
+only while location is on. The screen asks for the permission as it opens. If
+location is off, it says so and opens "Other network…" so the name can be
+typed in.
+
 ## Building
 
 Needs JDK 17+ and the Android SDK (platform 36).
@@ -77,8 +107,11 @@ Needs JDK 17+ and the Android SDK (platform 36).
 ./gradlew :app:assembleRelease
 ```
 
-There's one APK per CPU in `app/build/outputs/apk/release/`; phones want
-`app-arm64-v8a-release.apk` (about 39 MB). Without `keystore.properties` (or the
+`app/build/outputs/apk/release/` has an APK per CPU type and
+`app-universal-release.apk` (about 65 MB) with both ARM builds. Use the
+universal one when unsure: plenty of Android 9 devices run a 32-bit system on a
+64-bit chip, which only the 32-bit (`armeabi-v7a`) build runs on. On a device
+with adb, `adb shell getprop ro.product.cpu.abi` says which. Without `keystore.properties` (or the
 `KEYSTORE_FILE` / `KEYSTORE_PASSWORD` / `KEY_ALIAS` / `KEY_PASSWORD` environment
 variables), release builds are signed with the debug key so they still install.
 
@@ -97,7 +130,11 @@ variables), release builds are signed with the debug key so they still install.
   decoded by ffmpeg over the app's address, seeking past what has downloaded.
   ffmpeg's HTTP input reads by range requests the way VLC's does. These run
   libtorrent's Linux build, taken from the `libtorrent4j-linux` jar.
-- `ui/ScreensTest`: the splash, wall, launch and player screens rendered on
+- `wifi/`: the network list (one row per name, signal, security from scan
+  capabilities, password quoting), and joining on Robolectric's Android 9:
+  the saved configuration, turning Wi-Fi on, a new password replacing the
+  old entry, and networks it refuses.
+- `ui/ScreensTest`: the splash, wall, launch, player and Wi-Fi screens rendered on
   the JVM with Robolectric and Roborazzi, into `app/build/screens/` with
   `-Proborazzi.test.record=true`. Posters load from `-DposterDir=…` (TMDB
   images saved by file name) when it's given.
