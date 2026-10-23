@@ -216,7 +216,12 @@ only searches releases; `-DsnapshotSeed=films.tsv` adds films from a
 tab-separated list (TMDB id, year, IMDb id, poster path, popularity, title), and
 `-DsnapshotRetry=true` searches again now for films that came up empty.
 The first snapshot was seeded from the `arc_disney_titles` table: 684 films,
-419 of them playable. A phone that already has the app merges a newer snapshot
+419 of them playable. That table only had TMDB's first four studios, so the
+second added 466 films from the rest: the studios' film lists on TMDB's website
+(no API key needed), Disney Channel films and IMDb ids from Wikidata, each
+40 minutes or longer and already out. Searched on The Pirate Bay and Knaben,
+with the films that had come up empty searched again, that made 1,150 films,
+683 of them playable. A phone that already has the app merges a newer snapshot
 in when the app is updated, without losing what its own updates found.
 
 ## Licences

@@ -27,6 +27,15 @@ class ReleasesTest {
     }
 
     @Test
+    fun searchFormForEachSite() {
+        assertEquals("Lilo and Stitch", searchForm("Lilo & Stitch"))
+        assertEquals("WALL E", searchForm("WALL·E"))
+        assertEquals("Teacher s Pet", searchForm("Teacher's Pet"))
+        assertEquals("Teacher's Pet", searchForm("Teacher’s Pet", keepApostrophes = true))
+        assertEquals("Pokemon The Movie", searchForm("Pokémon: The 'Movie'", keepApostrophes = true))
+    }
+
+    @Test
     fun namedAsNeedsTheTitleFirstThenTheYear() {
         assertTrue(namedAs("[YTS.MX] Aladdin (1992) 1080p BRRip", "Aladdin", 1992))
         assertTrue(namedAs("Disney Movie - Amy 1981", "Amy", 1981))

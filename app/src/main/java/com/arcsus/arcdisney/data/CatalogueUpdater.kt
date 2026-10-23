@@ -174,13 +174,16 @@ class CatalogueUpdater(
             }
         }
         val named: (Release) -> Boolean = { if (year > 0) namedAs(it.name, f.title, year) else titleMatches(it.name, f.title) }
-        val query = searchForm(f.title) + if (year > 0) " $year" else ""
+        val withYear = if (year > 0) " $year" else ""
+        val query = searchForm(f.title) + withYear
 
         if (imdb != null) {
             search({ bay.search(imdb) }) { titleMatches(it.name, f.title) || (year > 0 && yearMatches(it.name, year)) }
         }
         if (found.size < 3) search({ bay.search(query) }, named)
-        if (knaben != null && found.values.count { it.seeds > 0 } < 3) search({ knaben.search(query) }, named)
+        if (knaben != null && found.values.count { it.seeds > 0 } < 3) {
+            search({ knaben.search(searchForm(f.title, keepApostrophes = true) + withYear) }, named)
+        }
         if (!answered) throw failure ?: IOException("No search answered.")
         return imdb to rankReleases(found.values.toList())
     }

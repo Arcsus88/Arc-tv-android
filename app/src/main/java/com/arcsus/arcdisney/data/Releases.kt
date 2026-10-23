@@ -18,10 +18,20 @@ fun normTitle(s: String): String =
 
 private fun titleTokens(s: String): List<String> = normTitle(s).split(' ').filter { it.isNotEmpty() && it !in STOP }
 
-/** The title as a search query: "WALL·E" → "WALL E", "Lilo & Stitch" → "Lilo and Stitch". */
-fun searchForm(title: String): String =
-    Normalizer.normalize(title, Normalizer.Form.NFKD).replace(DIACRITICS, "").replace("&", " and ")
-        .replace(Regex("[^A-Za-z0-9]+"), " ").replace(Regex("\\s+"), " ").trim()
+/**
+ * The title as a search query: "WALL·E" → "WALL E", "Lilo & Stitch" → "Lilo and
+ * Stitch". Knaben finds "Teacher's Pet" but not "Teacher s Pet", so it gets the
+ * apostrophes kept.
+ */
+fun searchForm(title: String, keepApostrophes: Boolean = false): String {
+    val plain = Normalizer.normalize(title, Normalizer.Form.NFKD).replace(DIACRITICS, "").replace("&", " and ")
+    val words = if (keepApostrophes) {
+        plain.replace('’', '\'').replace(Regex("[^A-Za-z0-9']+|(?<![A-Za-z])'|'(?![A-Za-z])"), " ")
+    } else {
+        plain.replace(Regex("[^A-Za-z0-9]+"), " ")
+    }
+    return words.replace(Regex("\\s+"), " ").trim()
+}
 
 /** The Pirate Bay categories worth streaming: Movies, HD Movies, UHD Movies (not DVDR or 3D). */
 val MOVIE_CATEGORIES = setOf("201", "207", "211")
