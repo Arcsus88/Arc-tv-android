@@ -17,6 +17,14 @@ class Settings(context: Context) {
         val TMDB_KEY = stringPreferencesKey("tmdb_key")
         val SKIPPED_KEY = booleanPreferencesKey("skipped_tmdb_key")
         val SETUP_DONE = booleanPreferencesKey("setup_done")
+        val LAST_VERSION = stringPreferencesKey("last_version")
+    }
+
+    /** Records the running version; returns the one before it (null on first run). */
+    suspend fun swapVersion(current: String): String? {
+        val last = store.data.first()[Keys.LAST_VERSION]
+        if (last != current) store.edit { it[Keys.LAST_VERSION] = current }
+        return last
     }
 
     /** First-run setup (getting the device online) has been finished or skipped. */

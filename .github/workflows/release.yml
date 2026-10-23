@@ -1,0 +1,96 @@
+name: Release
+
+# Every push to main becomes a release that installed devices pick up by
+# themselves (see RELEASING.md). Docs-only pushes don't.
+on:
+  push:
+    branches: [main]
+    paths-ignore: ['**.md']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Test, build signed APKs, publish release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check secrets
+        env:
+          SIGNING_PASSWORD: ${{ secrets.SIGNING_PASSWORD }}
+          UPDATE_TOKEN: ${{ secrets.UPDATE_TOKEN }}
+        run: |
+          if [ -z "$SIGNING_PASSWORD" ]; then
+            echo "::error::Add the SIGNING_PASSWORD repository secret (RELEASING.md), then re-run this workflow."
+            exit 1
+          fi
+          if [ -z "$UPDATE_TOKEN" ]; then
+            echo "::error::Add the UPDATE_TOKEN repository secret (RELEASING.md): without it this build could never update itself."
+            exit 1
+          fi
+
+      - name: Version
+        # versionCode only ever grows, so each release installs over the last.
+        run: |
+          echo "VERSION_CODE=$((100 + GITHUB_RUN_NUMBER))" >> "$GITHUB_ENV"
+          echo "VERSION_NAME=1.2.$GITHUB_RUN_NUMBER" >> "$GITHUB_ENV"
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Unit tests
+        run: ./gradlew :app:testDebugUnitTest --stacktrace
+
+      - name: Decrypt signing key
+        env:
+          SIGNING_PASSWORD: ${{ secrets.SIGNING_PASSWORD }}
+        run: >
+          openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000
+          -in signing/release.keystore.enc -out release.keystore -pass env:SIGNING_PASSWORD
+
+      - name: Build signed release APKs
+        env:
+          KEYSTORE_FILE: release.keystore
+          KEYSTORE_PASSWORD: ${{ secrets.SIGNING_PASSWORD }}
+          KEY_ALIAS: arcdisney
+          KEY_PASSWORD: ${{ secrets.SIGNING_PASSWORD }}
+          UPDATE_TOKEN: ${{ secrets.UPDATE_TOKEN }}
+          TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
+        run: >
+          ./gradlew :app:assembleRelease --stacktrace
+          -PversionCode="$VERSION_CODE" -PversionName="$VERSION_NAME"
+
+      - name: Name the APKs
+        run: |
+          mkdir -p dist
+          for abi in arm64-v8a armeabi-v7a universal; do
+            cp "app/build/outputs/apk/release/app-$abi-release.apk" "dist/arc-disney-$VERSION_NAME-$abi.apk"
+          done
+          rm -f release.keystore
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ env.VERSION_NAME }}
+          name: Arc Disney ${{ env.VERSION_NAME }}
+          target_commitish: ${{ github.sha }}
+          body: |
+            ${{ github.event.head_commit.message }}
+
+            Devices running Arc Disney install this by themselves within the hour.
+            For a new device, `arc-disney-${{ env.VERSION_NAME }}-universal.apk` installs on any ARM device.
+          files: dist/*.apk

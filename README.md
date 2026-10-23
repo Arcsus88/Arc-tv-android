@@ -99,6 +99,15 @@ only while location is on. The screen asks for the permission as it opens. If
 location is off, it says so and opens "Other network…" so the name can be
 typed in.
 
+## Updates and kiosk mode
+
+Every push to `main` publishes a signed GitHub Release, and devices install it
+by themselves within the hour, never in the middle of a film. Set up as the
+device owner, the app also locks the device to itself (it's the home screen,
+pinned, with only the power menu left) and updates without anyone tapping
+anything. [RELEASING.md](RELEASING.md) has the one-time GitHub setup (two
+secrets), the signing key, and how to set up a device.
+
 ## Building
 
 Needs JDK 17+ and the Android SDK (platform 36).
@@ -111,9 +120,13 @@ Needs JDK 17+ and the Android SDK (platform 36).
 `app-universal-release.apk` (about 65 MB) with both ARM builds. Use the
 universal one when unsure: plenty of Android 9 devices run a 32-bit system on a
 64-bit chip, which only the 32-bit (`armeabi-v7a`) build runs on. On a device
-with adb, `adb shell getprop ro.product.cpu.abi` says which. Without `keystore.properties` (or the
-`KEYSTORE_FILE` / `KEYSTORE_PASSWORD` / `KEY_ALIAS` / `KEY_PASSWORD` environment
-variables), release builds are signed with the debug key so they still install.
+with adb, `adb shell getprop ro.product.cpu.abi` says which.
+
+Local release builds without `keystore.properties` (or the `KEYSTORE_FILE` /
+`KEYSTORE_PASSWORD` / `KEY_ALIAS` / `KEY_PASSWORD` environment variables) are
+signed with the debug key so they still install, but they can't update to or
+from a published release. They don't check for updates either: that needs
+`UPDATE_TOKEN`, which only the release workflow provides.
 
 ## Tests
 
@@ -134,6 +147,12 @@ variables), release builds are signed with the debug key so they still install.
   capabilities, password quoting), and joining on Robolectric's Android 9:
   the saved configuration, turning Wi-Fi on, a new password replacing the
   old entry, and networks it refuses.
+- `update/`: picking the newest release and this CPU's APK, reading releases
+  with the token, and downloading through GitHub's redirect without the token
+  following it.
+- `admin/KioskTest`: kiosk mode as device owner on Robolectric's Android 9 (lock
+  task, home screen, location granted), an ordinary install left alone, and an
+  update that downloads during a film but installs only once it ends.
 - `ui/ScreensTest`: the splash, wall, launch, player and Wi-Fi screens rendered on
   the JVM with Robolectric and Roborazzi, into `app/build/screens/` with
   `-Proborazzi.test.record=true`. Posters load from `-DposterDir=…` (TMDB

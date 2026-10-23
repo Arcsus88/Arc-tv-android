@@ -72,6 +72,12 @@ class DisneyViewModel(app: Application) : AndroidViewModel(app) {
         wifi.startMonitoring()
         viewModelScope.launch { catalogue.value = graph.store.load() }
         viewModelScope.launch { _setupNeeded.value = !graph.settings.setupDone() }
+        // An update must never cut a film off: it waits while one is on screen.
+        viewModelScope.launch { playback.ui.collect { graph.updates.busy.value = it != null } }
+        viewModelScope.launch {
+            val before = graph.settings.swapVersion(BuildConfig.VERSION_NAME)
+            if (before != null && before != BuildConfig.VERSION_NAME) show("Updated to ${BuildConfig.VERSION_NAME}.")
+        }
     }
 
     /** A device that's already online when the splash ends has nothing to set up. */

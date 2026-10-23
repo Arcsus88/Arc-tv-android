@@ -36,6 +36,16 @@ val localProperties = Properties().apply {
 }
 val tmdbApiKey: String = localProperties.getProperty("tmdb.apiKey") ?: System.getenv("TMDB_API_KEY") ?: ""
 
+// Self-update (see RELEASING.md): the release workflow passes the version and a
+// read-only GitHub token for this private repo's releases. Builds without a
+// token never check for updates.
+val updateToken: String = localProperties.getProperty("update.token") ?: System.getenv("UPDATE_TOKEN") ?: ""
+val updateRepo = "Arcsus88/Arc-tv-android"
+val appVersionCode = (findProperty("versionCode") as String?)?.toIntOrNull() ?: 2
+val appVersionName = (findProperty("versionName") as String?)?.takeIf { it.isNotBlank() } ?: "1.1.0"
+
+fun quoted(s: String) = "\"" + s.replace("\\", "").replace("\"", "") + "\""
+
 android {
     namespace = "com.arcsus.arcdisney"
     compileSdk = 36
@@ -44,9 +54,11 @@ android {
         applicationId = "com.arcsus.arcdisney"
         minSdk = 26
         targetSdk = 36
-        versionCode = 2
-        versionName = "1.1.0"
-        buildConfigField("String", "TMDB_API_KEY", "\"${tmdbApiKey.replace("\"", "")}\"")
+        versionCode = appVersionCode
+        versionName = appVersionName
+        buildConfigField("String", "TMDB_API_KEY", quoted(tmdbApiKey))
+        buildConfigField("String", "UPDATE_TOKEN", quoted(updateToken))
+        buildConfigField("String", "UPDATE_REPO", quoted(updateRepo))
     }
 
     // libVLC and libtorrent are native, so each CPU type gets its own APK, plus

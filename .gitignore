@@ -11,10 +11,13 @@ captures/
 .cxx/
 .externalNativeBuild/
 
-# Release signing (never commit)
+# Release signing: only the encrypted signing/release.keystore.enc is committed
 keystore.properties
 *.jks
 *.keystore
+
+# Release workflow output
+dist/
 
 # OS
 .DS_Store

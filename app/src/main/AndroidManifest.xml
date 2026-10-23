@@ -14,6 +14,9 @@
 
     <uses-feature android:name="android.hardware.wifi" android:required="false" />
 
+    <!-- Self-update from GitHub Releases (silent as device owner). -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+
     <application
         android:name=".ArcDisneyApp"
         android:allowBackup="false"
@@ -29,6 +32,7 @@
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|uiMode"
             android:exported="true"
             android:launchMode="singleTask"
+            android:lockTaskMode="if_whitelisted"
             android:theme="@style/Theme.ArcDisney.Starting"
             android:windowSoftInputMode="adjustResize">
             <intent-filter>
@@ -36,5 +40,43 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- The home screen in kiosk mode. Off until the app is the device owner,
+             so an ordinary install never asks which home app to use. -->
+        <activity-alias
+            android:name=".KioskHome"
+            android:enabled="false"
+            android:exported="true"
+            android:targetActivity=".MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.HOME" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity-alias>
+
+        <receiver
+            android:name=".admin.AdminReceiver"
+            android:exported="true"
+            android:permission="android.permission.BIND_DEVICE_ADMIN">
+            <meta-data
+                android:name="android.app.device_admin"
+                android:resource="@xml/device_admin" />
+            <intent-filter>
+                <action android:name="android.app.action.DEVICE_ADMIN_ENABLED" />
+            </intent-filter>
+        </receiver>
+
+        <receiver
+            android:name=".update.InstallResultReceiver"
+            android:exported="false" />
+
+        <receiver
+            android:name=".update.UpdatedReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
     </application>
 </manifest>
