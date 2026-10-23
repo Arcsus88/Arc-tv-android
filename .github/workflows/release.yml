@@ -23,20 +23,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Check secrets
-        env:
-          SIGNING_PASSWORD: ${{ secrets.SIGNING_PASSWORD }}
-          UPDATE_TOKEN: ${{ secrets.UPDATE_TOKEN }}
-        run: |
-          if [ -z "$SIGNING_PASSWORD" ]; then
-            echo "::error::Add the SIGNING_PASSWORD repository secret (RELEASING.md), then re-run this workflow."
-            exit 1
-          fi
-          if [ -z "$UPDATE_TOKEN" ]; then
-            echo "::error::Add the UPDATE_TOKEN repository secret (RELEASING.md): without it this build could never update itself."
-            exit 1
-          fi
-
       - name: Version
         # versionCode only ever grows, so each release installs over the last.
         run: |
@@ -54,6 +40,21 @@ jobs:
 
       - name: Unit tests
         run: ./gradlew :app:testDebugUnitTest --stacktrace
+
+      # After the tests, so a run without the secrets still shows whether the code is sound.
+      - name: Check secrets
+        env:
+          SIGNING_PASSWORD: ${{ secrets.SIGNING_PASSWORD }}
+          UPDATE_TOKEN: ${{ secrets.UPDATE_TOKEN }}
+        run: |
+          if [ -z "$SIGNING_PASSWORD" ]; then
+            echo "::error::Add the SIGNING_PASSWORD repository secret (RELEASING.md), then re-run this workflow."
+            exit 1
+          fi
+          if [ -z "$UPDATE_TOKEN" ]; then
+            echo "::error::Add the UPDATE_TOKEN repository secret (RELEASING.md): without it this build could never update itself."
+            exit 1
+          fi
 
       - name: Decrypt signing key
         env:
