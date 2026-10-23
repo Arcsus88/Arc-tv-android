@@ -179,6 +179,7 @@ private fun Starting(ui: PlaybackController.Ui, phase: Phase, onTryAnother: () -
         when {
             buffering != null -> "Getting it ready · ${(fraction * 100).toInt()}%"
             phase is Phase.Playing -> "Starting…"
+            phase is Phase.CheckingDebrid -> "Checking AllDebrid…"
             else -> "Finding people sharing it…"
         },
         color = Night.Text,
@@ -203,9 +204,13 @@ private fun Starting(ui: PlaybackController.Ui, phase: Phase, onTryAnother: () -
     Spacer(Modifier.height(10.dp))
     val s = ui.stats
     Text(
-        buildString {
-            append(if (s.peers == 1) "1 peer" else "${s.peers} peers")
-            if (s.bytesPerSecond > 0) append(" · ").append(speed(s.bytesPerSecond))
+        if (ui.source == PlaybackController.Source.ALLDEBRID) {
+            "Release ${ui.attempt} of ${ui.candidates}"
+        } else {
+            buildString {
+                append(if (s.peers == 1) "1 peer" else "${s.peers} peers")
+                if (s.bytesPerSecond > 0) append(" · ").append(speed(s.bytesPerSecond))
+            }
         },
         color = Night.Muted,
         fontSize = 13.sp,

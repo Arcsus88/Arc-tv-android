@@ -4,6 +4,7 @@ import android.app.Application
 import android.content.Context
 import com.arcsus.arcdisney.data.CatalogueStore
 import com.arcsus.arcdisney.data.Settings
+import com.arcsus.arcdisney.debrid.AllDebrid
 import com.arcsus.arcdisney.torrent.TorrentEngine
 import com.arcsus.arcdisney.update.AutoUpdater
 import com.arcsus.arcdisney.update.ReleaseClient
@@ -33,6 +34,9 @@ class AppGraph(context: Context) {
     val settings = Settings(context)
 
     val wifi: WifiController by lazy { WifiController(context) }
+
+    /** Faster streaming for devices signed in to their own AllDebrid account. */
+    val allDebrid = AllDebrid(http)
 
     /** Hourly checks for a newer GitHub release; builds without a token don't check. */
     val updates = AutoUpdater(

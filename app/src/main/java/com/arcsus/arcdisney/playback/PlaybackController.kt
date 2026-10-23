@@ -2,6 +2,9 @@ package com.arcsus.arcdisney.playback
 
 import com.arcsus.arcdisney.data.Film
 import com.arcsus.arcdisney.data.Release
+import com.arcsus.arcdisney.debrid.AllDebrid
+import com.arcsus.arcdisney.debrid.AllDebridException
+import com.arcsus.arcdisney.debrid.NotCachedException
 import com.arcsus.arcdisney.torrent.StreamState
 import com.arcsus.arcdisney.torrent.StreamStats
 import com.arcsus.arcdisney.torrent.TorrentEngine
@@ -18,18 +21,28 @@ import kotlinx.coroutines.withContext
 import java.io.IOException
 
 /**
- * Tapping a poster: the best seeded release starts streaming; if it can't
- * find peers or stalls before VLC opens it, the next one is tried, then the
- * next, so a dead torrent never needs a second tap.
+ * Tapping a poster. On a device signed in to AllDebrid, its cache is asked
+ * first: a release it already has streams straight from AllDebrid at full
+ * speed. Otherwise (or when it has none of them) the best seeded release
+ * streams by torrent; if that can't find peers or stalls before VLC opens it,
+ * the next one is tried, then the next, so a dead torrent never needs a
+ * second tap.
  */
 class PlaybackController(
     /** Called off the main thread: it loads libtorrent's native library. */
     engine: () -> TorrentEngine,
     private val scope: CoroutineScope,
+    private val allDebrid: AllDebrid? = null,
+    /** This device's own AllDebrid key, "" when it isn't signed in. */
+    private val allDebridKey: suspend () -> String = { "" },
 ) {
     private val engine by lazy(engine)
 
+    enum class Source { ALLDEBRID, TORRENT }
+
     sealed interface Phase {
+        /** Asking AllDebrid whether it already has one of the releases. */
+        data object CheckingDebrid : Phase
         data object Connecting : Phase
         data class Buffering(val fraction: Float) : Phase
         data class Playing(val url: String, val fileName: String) : Phase
@@ -43,16 +56,18 @@ class PlaybackController(
         val attempt: Int,
         val candidates: Int,
         val phase: Phase,
+        val source: Source = Source.TORRENT,
         val stats: StreamStats = StreamStats(),
-        /** Why an earlier release was skipped, for the launch screen. */
+        /** Why an earlier release (or AllDebrid) was passed over, for the launch screen. */
         val note: String? = null,
     ) {
-        val canTryAnother: Boolean get() = attempt < candidates
+        val canTryAnother: Boolean get() = source == Source.TORRENT && attempt < candidates
     }
 
     private val _ui = MutableStateFlow<Ui?>(null)
     val ui: StateFlow<Ui?> = _ui.asStateFlow()
 
+    private var lookup: Job? = null
     private var job: Job? = null
     private var stream: TorrentStream? = null
     private var candidates: List<Release> = emptyList()
@@ -61,30 +76,78 @@ class PlaybackController(
     fun play(film: Film) {
         stop()
         candidates = film.releases.filter { it.seeds > 0 }.take(MAX_TRIES)
-        if (candidates.isEmpty()) return
+        // AllDebrid's cache doesn't care whether anyone is still seeding.
+        val cachedCandidates = film.releases.take(MAX_DEBRID_TRIES)
+        if (candidates.isEmpty() && cachedCandidates.isEmpty()) return
         index = 0
-        start(film, note = null)
+        lookup = scope.launch {
+            val key = allDebridKey()
+            val note = if (allDebrid != null && key.isNotBlank() && cachedCandidates.isNotEmpty()) {
+                viaAllDebrid(allDebrid, key, film, cachedCandidates) ?: return@launch
+            } else {
+                null
+            }
+            if (candidates.isEmpty()) {
+                _ui.value = Ui(film, cachedCandidates.first(), 1, 1, Phase.Failed("${note.orEmpty()} No one is sharing it right now either.".trim()))
+            } else {
+                startTorrent(film, note)
+            }
+        }
+    }
+
+    /**
+     * Plays the first release AllDebrid already has, or says why it couldn't
+     * (null once one is playing).
+     */
+    private suspend fun viaAllDebrid(ad: AllDebrid, key: String, film: Film, releases: List<Release>): String? {
+        _ui.value = Ui(film, releases.first(), 1, releases.size, Phase.CheckingDebrid, Source.ALLDEBRID)
+        for ((i, release) in releases.withIndex()) {
+            _ui.update { it?.copy(release = release, attempt = i + 1) }
+            try {
+                val s = ad.resolve(key, release.magnet)
+                _ui.update { it?.copy(phase = Phase.Playing(s.url, s.fileName)) }
+                return null
+            } catch (e: NotCachedException) {
+                continue
+            } catch (e: AllDebridException) {
+                return "AllDebrid: ${e.message} Streaming by torrent instead."
+            } catch (e: IOException) {
+                return "Couldn't reach AllDebrid, so streaming by torrent."
+            }
+        }
+        return "Not ready on AllDebrid yet, so streaming by torrent."
     }
 
     /** The launch screen's "Try another release", or VLC failing to open the file. */
     fun tryAnother(reason: String? = null) {
         val ui = _ui.value ?: return
+        if (ui.source == Source.ALLDEBRID) {
+            // AllDebrid's link wouldn't play: fall back to the torrent.
+            if (candidates.isEmpty()) {
+                _ui.value = ui.copy(phase = Phase.Failed(reason ?: "It wouldn't play from AllDebrid."))
+            } else {
+                index = 0
+                startTorrent(ui.film, listOfNotNull(reason, "Streaming by torrent instead.").joinToString(" "))
+            }
+            return
+        }
         if (index + 1 >= candidates.size) {
             _ui.value = ui.copy(phase = Phase.Failed(reason ?: "None of its releases would play right now."))
             return
         }
         index++
-        start(ui.film, reason)
+        startTorrent(ui.film, reason)
     }
 
-    /** "Try again" after every release failed: back to the best one. */
+    /** "Try again" after everything failed: from the top, AllDebrid included. */
     fun retry() {
         val ui = _ui.value ?: return
-        index = 0
-        start(ui.film, null)
+        play(ui.film)
     }
 
     fun stop() {
+        lookup?.cancel()
+        lookup = null
         job?.cancel()
         job = null
         val s = stream
@@ -93,12 +156,12 @@ class PlaybackController(
         if (s != null) scope.launch(Dispatchers.IO) { s.close() }
     }
 
-    private fun start(film: Film, note: String?) {
+    private fun startTorrent(film: Film, note: String?) {
         job?.cancel()
         stream?.let { old -> scope.launch(Dispatchers.IO) { old.close() } }
         stream = null
         val release = candidates[index]
-        _ui.value = Ui(film, release, index + 1, candidates.size, Phase.Connecting, note = note)
+        _ui.value = Ui(film, release, index + 1, candidates.size, Phase.Connecting, Source.TORRENT, note = note)
         job = scope.launch {
             val s = try {
                 withContext(Dispatchers.IO) { engine.open(release.magnet) }
@@ -129,5 +192,6 @@ class PlaybackController(
 
     private companion object {
         const val MAX_TRIES = 4
+        const val MAX_DEBRID_TRIES = 5
     }
 }

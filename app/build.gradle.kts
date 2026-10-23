@@ -177,6 +177,9 @@ dependencies {
     implementation(libs.libtorrent4j.arm)
     libtorrentLinux(libs.libtorrent4j.linux)
 
+    // The QR code for AllDebrid's PIN sign-in.
+    implementation(libs.zxing.core)
+
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.okhttp.mockwebserver)

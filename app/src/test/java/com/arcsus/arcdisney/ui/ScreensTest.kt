@@ -25,6 +25,8 @@ import coil.request.ImageResult
 import coil.request.SuccessResult
 import com.arcsus.arcdisney.data.CatalogueStore
 import com.arcsus.arcdisney.data.Film
+import com.arcsus.arcdisney.debrid.AllDebridAccount
+import com.arcsus.arcdisney.debrid.AllDebridPin
 import com.arcsus.arcdisney.playback.PlaybackController
 import com.arcsus.arcdisney.torrent.StreamStats
 import com.arcsus.arcdisney.ui.theme.ArcDisneyTheme
@@ -102,6 +104,7 @@ class ScreensTest {
             online = true,
             onUpdate = {},
             onOpenWifi = {},
+            onAllDebrid = {},
             onTmdbKey = {},
             onPlay = {},
         )
@@ -118,6 +121,7 @@ class ScreensTest {
             online = true,
             onUpdate = {},
             onOpenWifi = {},
+            onAllDebrid = {},
             onTmdbKey = {},
             onPlay = {},
         )
@@ -175,7 +179,7 @@ class ScreensTest {
                 time = 2_412_000,
                 length = 6_300_000,
                 scrub = null,
-                stats = StreamStats(peers = 31, bytesPerSecond = 3_100_000, fileProgress = 0.47f),
+                detail = "47% downloaded \u00B7 3.0 MB/s \u00B7 31 peers",
                 fill = false,
                 onBack = {},
                 onFill = {},
@@ -263,8 +267,55 @@ class ScreensTest {
             online = false,
             onUpdate = {},
             onOpenWifi = {},
+            onAllDebrid = {},
             onTmdbKey = {},
             onPlay = {},
+        )
+    }
+
+    @Composable
+    private fun Debrid(state: DisneyViewModel.Debrid, setup: Boolean = true) = DebridScreen(
+        state = state,
+        setup = setup,
+        onSignIn = {},
+        onCancel = {},
+        onSignOut = {},
+        onContinue = {},
+        onBack = {},
+    )
+
+    @Test
+    fun allDebridSetupStep() = shoot("14-alldebrid-setup") { Debrid(DisneyViewModel.Debrid.SignedOut) }
+
+    @Test
+    fun allDebridPin() = shoot("15-alldebrid-pin") {
+        Debrid(
+            DisneyViewModel.Debrid.WaitingForPin(
+                AllDebridPin("K7QX", "chk", "https://alldebrid.com/pin/", "https://alldebrid.com/pin/?pin=K7QX", 600),
+            ),
+        )
+    }
+
+    @Test
+    fun allDebridSignedIn() = shoot("16-alldebrid-signed-in") {
+        Debrid(DisneyViewModel.Debrid.SignedIn(AllDebridAccount("richard", premium = true, premiumUntil = 1_830_000_000)), setup = false)
+    }
+
+    @Test
+    fun launchCheckingAllDebrid() = shoot("17-launch-alldebrid") {
+        val film = films.first { it.title == "Coco" }
+        LaunchScreen(
+            PlaybackController.Ui(
+                film = film,
+                release = film.releases.first(),
+                attempt = 1,
+                candidates = 5,
+                phase = PlaybackController.Phase.CheckingDebrid,
+                source = PlaybackController.Source.ALLDEBRID,
+            ),
+            onClose = {},
+            onTryAnother = {},
+            onRetry = {},
         )
     }
 }

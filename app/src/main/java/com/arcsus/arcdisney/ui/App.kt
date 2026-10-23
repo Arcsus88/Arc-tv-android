@@ -22,7 +22,7 @@ import com.arcsus.arcdisney.playback.PlaybackController.Phase
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 
-private enum class Stage { SPLASH, SETUP, WALL }
+private enum class Stage { SPLASH, SETUP, DEBRID, WALL }
 
 /**
  * Splash, then (on first run, if the device isn't online) Wi-Fi setup, then
@@ -40,18 +40,23 @@ fun App(vm: DisneyViewModel) {
     val setupNeeded by vm.setupNeeded.collectAsStateWithLifecycle()
     val wifi by vm.wifiState.collectAsStateWithLifecycle()
     val wifiOpen by vm.wifiOpen.collectAsStateWithLifecycle()
+    val debrid by vm.debrid.collectAsStateWithLifecycle()
+    val debridOffer by vm.debridOffer.collectAsStateWithLifecycle()
+    val debridOpen by vm.debridOpen.collectAsStateWithLifecycle()
 
     // The splash plays through once, and holds until the catalogue and settings are in.
     var splashDone by rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(Unit) {
         if (!splashDone) delay(1_900)
         vm.setupNeeded.first { it != null }
+        vm.debridOffer.first { it != null }
         vm.onSplashDone()
         splashDone = true
     }
     val stage = when {
         !splashDone || films == null -> Stage.SPLASH
         setupNeeded == true -> Stage.SETUP
+        debridOffer == true -> Stage.DEBRID
         else -> Stage.WALL
     }
 
@@ -67,6 +72,15 @@ fun App(vm: DisneyViewModel) {
                     onSkip = vm::finishSetup,
                     onBack = {},
                 )
+                Stage.DEBRID -> DebridScreen(
+                    state = debrid,
+                    setup = true,
+                    onSignIn = vm::startDebridSignIn,
+                    onCancel = vm::cancelDebridSignIn,
+                    onSignOut = vm::signOutDebrid,
+                    onContinue = vm::finishDebridOffer,
+                    onBack = {},
+                )
                 Stage.WALL -> PosterWall(
                     films = films.orEmpty(),
                     query = query,
@@ -76,6 +90,7 @@ fun App(vm: DisneyViewModel) {
                     online = wifi.online,
                     onUpdate = vm::onUpdateClick,
                     onOpenWifi = vm::openWifi,
+                    onAllDebrid = vm::openDebrid,
                     onTmdbKey = vm::onTmdbKey,
                     onPlay = vm::play,
                 )
@@ -90,6 +105,18 @@ fun App(vm: DisneyViewModel) {
                 onContinue = vm::closeWifi,
                 onSkip = vm::closeWifi,
                 onBack = vm::closeWifi,
+            )
+        }
+
+        AnimatedVisibility(visible = stage == Stage.WALL && debridOpen, enter = fadeIn(), exit = fadeOut()) {
+            DebridScreen(
+                state = debrid,
+                setup = false,
+                onSignIn = vm::startDebridSignIn,
+                onCancel = vm::cancelDebridSignIn,
+                onSignOut = vm::signOutDebrid,
+                onContinue = vm::closeDebrid,
+                onBack = vm::closeDebrid,
             )
         }
 
@@ -116,6 +143,7 @@ fun App(vm: DisneyViewModel) {
                 url = phase.url,
                 title = ui.film.title,
                 stats = ui.stats,
+                fromAllDebrid = ui.source == PlaybackController.Source.ALLDEBRID,
                 onClose = vm.playback::stop,
                 onError = { vm.playback.tryAnother(it) },
             )

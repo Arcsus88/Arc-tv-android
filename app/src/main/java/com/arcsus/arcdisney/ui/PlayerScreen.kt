@@ -88,6 +88,8 @@ fun PlayerScreen(
     url: String,
     title: String,
     stats: StreamStats,
+    /** Streaming from AllDebrid rather than the torrent: no download figures to show. */
+    fromAllDebrid: Boolean,
     onClose: () -> Unit,
     onError: (String) -> Unit,
 ) {
@@ -200,7 +202,12 @@ fun PlayerScreen(
                 time = time,
                 length = length,
                 scrub = scrub,
-                stats = stats,
+                detail = if (fromAllDebrid) {
+                    "Streaming from AllDebrid"
+                } else {
+                    "${(stats.fileProgress * 100).toInt()}% downloaded \u00B7 ${speed(stats.bytesPerSecond)} \u00B7 " +
+                        if (stats.peers == 1) "1 peer" else "${stats.peers} peers"
+                },
                 fill = fill,
                 onBack = onClose,
                 onFill = {
@@ -239,7 +246,8 @@ fun PlayerControls(
     time: Long,
     length: Long,
     scrub: Float?,
-    stats: StreamStats,
+    /** Under the seek bar, right: where the film is coming from. */
+    detail: String,
     fill: Boolean,
     onBack: () -> Unit,
     onFill: () -> Unit,
@@ -337,8 +345,7 @@ fun PlayerControls(
                 Text("${clock(shown)} / ${clock(length)}", color = Color.White, fontSize = 13.sp)
                 Spacer(Modifier.weight(1f))
                 Text(
-                    "${(stats.fileProgress * 100).toInt()}% downloaded \u00B7 ${speed(stats.bytesPerSecond)} \u00B7 " +
-                        if (stats.peers == 1) "1 peer" else "${stats.peers} peers",
+                    detail,
                     color = Color.White.copy(alpha = 0.7f),
                     fontSize = 12.sp,
                 )

@@ -12,6 +12,8 @@ import com.arcsus.arcdisney.data.PirateBay
 import com.arcsus.arcdisney.data.Tmdb
 import com.arcsus.arcdisney.data.matches
 import com.arcsus.arcdisney.data.searchWords
+import com.arcsus.arcdisney.debrid.AllDebridAccount
+import com.arcsus.arcdisney.debrid.AllDebridPin
 import com.arcsus.arcdisney.playback.PlaybackController
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -20,8 +22,10 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import java.io.IOException
 
 class DisneyViewModel(app: Application) : AndroidViewModel(app) {
 
@@ -55,7 +59,12 @@ class DisneyViewModel(app: Application) : AndroidViewModel(app) {
     private val _askForKey = MutableStateFlow(false)
     val askForKey: StateFlow<Boolean> = _askForKey.asStateFlow()
 
-    val playback = PlaybackController({ graph.engine }, viewModelScope)
+    val playback = PlaybackController(
+        engine = { graph.engine },
+        scope = viewModelScope,
+        allDebrid = graph.allDebrid,
+        allDebridKey = { graph.settings.allDebridKey.first() },
+    )
 
     val wifi = graph.wifi
     val wifiState = wifi.state
@@ -68,10 +77,40 @@ class DisneyViewModel(app: Application) : AndroidViewModel(app) {
     private val _wifiOpen = MutableStateFlow(false)
     val wifiOpen: StateFlow<Boolean> = _wifiOpen.asStateFlow()
 
+    /** This device's AllDebrid sign-in, as the AllDebrid screen shows it. */
+    sealed interface Debrid {
+        data object SignedOut : Debrid
+        data object GettingPin : Debrid
+        data class WaitingForPin(val pin: AllDebridPin) : Debrid
+
+        /** [account] is null until AllDebrid has said who it is (or if it couldn't). */
+        data class SignedIn(val account: AllDebridAccount?) : Debrid
+        data class Failed(val message: String) : Debrid
+    }
+
+    private val _debrid = MutableStateFlow<Debrid>(Debrid.SignedOut)
+    val debrid: StateFlow<Debrid> = _debrid.asStateFlow()
+    private var signIn: Job? = null
+
+    /** Null until known: whether first run still has to offer the AllDebrid sign-in. */
+    private val _debridOffer = MutableStateFlow<Boolean?>(null)
+    val debridOffer: StateFlow<Boolean?> = _debridOffer.asStateFlow()
+
+    private val _debridOpen = MutableStateFlow(false)
+    val debridOpen: StateFlow<Boolean> = _debridOpen.asStateFlow()
+
     init {
         wifi.startMonitoring()
         viewModelScope.launch { catalogue.value = graph.store.load() }
         viewModelScope.launch { _setupNeeded.value = !graph.settings.setupDone() }
+        viewModelScope.launch { _debridOffer.value = !graph.settings.debridOffered() }
+        viewModelScope.launch {
+            val key = graph.settings.allDebridKey.first()
+            if (key.isNotBlank()) {
+                _debrid.value = Debrid.SignedIn(null)
+                loadAccount(key)
+            }
+        }
         // An update must never cut a film off: it waits while one is on screen.
         viewModelScope.launch { playback.ui.collect { graph.updates.busy.value = it != null } }
         viewModelScope.launch {
@@ -92,6 +131,68 @@ class DisneyViewModel(app: Application) : AndroidViewModel(app) {
 
     fun openWifi() {
         _wifiOpen.value = true
+    }
+
+    // ---- AllDebrid ----
+
+    fun openDebrid() {
+        _debridOpen.value = true
+    }
+
+    fun closeDebrid() {
+        cancelDebridSignIn()
+        _debridOpen.value = false
+    }
+
+    /** First run's AllDebrid step is done, signed in or skipped. */
+    fun finishDebridOffer() {
+        cancelDebridSignIn()
+        _debridOffer.value = false
+        viewModelScope.launch { graph.settings.markDebridOffered() }
+    }
+
+    /** Shows a PIN, waits for it to be entered on another device, keeps the key. */
+    fun startDebridSignIn() {
+        signIn?.cancel()
+        _debrid.value = Debrid.GettingPin
+        signIn = viewModelScope.launch {
+            try {
+                val pin = graph.allDebrid.startPin()
+                _debrid.value = Debrid.WaitingForPin(pin)
+                val key = graph.allDebrid.awaitKey(pin)
+                if (key == null) {
+                    _debrid.value = Debrid.Failed("The code ran out before it was entered. Try again for a new one.")
+                    return@launch
+                }
+                graph.settings.saveAllDebridKey(key)
+                _debrid.value = Debrid.SignedIn(null)
+                loadAccount(key)
+            } catch (e: IOException) {
+                _debrid.value = Debrid.Failed(e.message ?: "Couldn't reach AllDebrid.")
+            }
+        }
+    }
+
+    fun cancelDebridSignIn() {
+        val waiting = _debrid.value is Debrid.GettingPin || _debrid.value is Debrid.WaitingForPin || _debrid.value is Debrid.Failed
+        signIn?.cancel()
+        signIn = null
+        if (waiting) _debrid.value = Debrid.SignedOut
+    }
+
+    fun signOutDebrid() {
+        cancelDebridSignIn()
+        _debrid.value = Debrid.SignedOut
+        viewModelScope.launch { graph.settings.saveAllDebridKey("") }
+    }
+
+    private suspend fun loadAccount(key: String) {
+        val account = try {
+            graph.allDebrid.account(key)
+        } catch (e: IOException) {
+            return // still signed in; the details just aren't shown
+        }
+        if (_debrid.value is Debrid.SignedIn) _debrid.value = Debrid.SignedIn(account)
     }
 
     fun closeWifi() {

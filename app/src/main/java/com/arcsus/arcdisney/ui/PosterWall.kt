@@ -95,6 +95,7 @@ fun PosterWall(
     online: Boolean,
     onUpdate: () -> Unit,
     onOpenWifi: () -> Unit,
+    onAllDebrid: () -> Unit,
     onTmdbKey: () -> Unit,
     onPlay: (Film) -> Unit,
     modifier: Modifier = Modifier,
@@ -123,6 +124,7 @@ fun PosterWall(
                     busy = update != DisneyViewModel.Update.Idle,
                     onClick = onUpdate,
                     onOpenWifi = onOpenWifi,
+                    onAllDebrid = onAllDebrid,
                     onTmdbKey = onTmdbKey,
                 )
             }
@@ -233,7 +235,13 @@ private fun Pill(text: String, onClick: (() -> Unit)? = null) {
 /** Tap: look for new films. Long-press: the few settings a locked device needs. */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun UpdateButton(busy: Boolean, onClick: () -> Unit, onOpenWifi: () -> Unit, onTmdbKey: () -> Unit) {
+private fun UpdateButton(
+    busy: Boolean,
+    onClick: () -> Unit,
+    onOpenWifi: () -> Unit,
+    onAllDebrid: () -> Unit,
+    onTmdbKey: () -> Unit,
+) {
     val spin = rememberInfiniteTransition(label = "spin")
     val angle by spin.animateFloat(0f, 360f, infiniteRepeatable(tween(900, easing = LinearEasing), RepeatMode.Restart), label = "angle")
     var menu by remember { mutableStateOf(false) }
@@ -263,6 +271,10 @@ private fun UpdateButton(busy: Boolean, onClick: () -> Unit, onOpenWifi: () -> U
             DropdownMenuItem(text = { Text("Wi-Fi") }, onClick = {
                 menu = false
                 onOpenWifi()
+            })
+            DropdownMenuItem(text = { Text("AllDebrid account") }, onClick = {
+                menu = false
+                onAllDebrid()
             })
             DropdownMenuItem(text = { Text("TMDB key") }, onClick = {
                 menu = false

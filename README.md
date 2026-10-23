@@ -1,10 +1,12 @@
 # Arc Disney
 
 An Android phone app for the Disney catalogue from Arc TV, with everything on the
-phone: no backend and no debrid account. It opens on a Disney splash that fades
-into a wall of posters, with nothing above them but a search bar and an update
-button. Tapping a poster streams the film by torrent straight into VLC, which is
-built into the app, so playback never leaves it.
+phone: no backend, and no shared debrid account. It opens on a Disney splash that
+fades into a wall of posters, with nothing above them but a search bar and an
+update button. Tapping a poster plays the film in VLC, which is built into the
+app, so playback never leaves it: from the device's own AllDebrid account when
+it's signed in to one and AllDebrid has the film (full speed), otherwise by
+torrent, streamed on the phone.
 
 It's made for a locked Android 9 device: the user never needs the Settings app,
 so the app gets the device onto Wi-Fi itself (see [Wi-Fi](#wi-fi)). It runs on
@@ -41,7 +43,24 @@ There's no TMDB key in the source. Builds take one from `local.properties`
 one, the first press of the update button asks for a key (long-press it later
 to change it); "Just re-check" skips TMDB and only searches releases.
 
-**Playing a film** (`torrent/`):
+**AllDebrid** (`debrid/`, optional, per device): each device can sign in to
+its own account, once on first run (after Wi-Fi, skippable) or later from the
+update button's long-press menu. The sign-in is AllDebrid's PIN flow: the
+screen shows a code and a QR code to enter at alldebrid.com/pin from any phone
+or computer, so nothing is typed on the device, and the API key it gets is
+kept on that device only (Sign out removes it). Nothing debrid goes into the
+APK, so the same app can be handed to anyone.
+
+On a signed-in device, Play first asks AllDebrid for the film's releases (up to
+five, seeded or not: its cache doesn't need seeders). The first one it already
+has plays straight from AllDebrid's servers; ones it doesn't have are removed
+from the account again. If it has none of them, or the account has a problem
+(expired, not premium, a new location to confirm by email), the launch screen
+says so and the film streams by torrent as below. If VLC can't play
+AllDebrid's link, the torrent takes over too. The requests come from the
+device itself, as AllDebrid only serves links to the IP that asked for them.
+
+**Playing a film by torrent** (`torrent/`):
 
 - `TorrentEngine` runs libtorrent (via libtorrent4j) on the phone, with DHT,
   local peer discovery and UPnP/NAT-PMP. It adds the release's magnet, waits
@@ -70,8 +89,10 @@ Leaving the app pauses the film.
 
 **Worth knowing:** streaming a torrent means the phone downloads from, and
 uploads to, everyone sharing it, and they can see its IP address. In the UK
-that's how copyright letters from ISPs come about. The debrid route in Arc TV
-avoids this.
+that's how copyright letters from ISPs come about. Playing from AllDebrid
+avoids this, as only AllDebrid's servers touch the torrent. Don't share one
+AllDebrid account between devices on different connections: AllDebrid treats
+use from several places at once as account sharing.
 
 ## Wi-Fi
 
@@ -147,6 +168,12 @@ from a published release. They don't check for updates either: that needs
   capabilities, password quoting), and joining on Robolectric's Android 9:
   the saved configuration, turning Wi-Fi on, a new password replacing the
   old entry, and networks it refuses.
+- `debrid/`: the AllDebrid PIN sign-in, account details, a cached release
+  resolving to its largest file, an uncached one removed again, and account
+  errors keeping AllDebrid's reason.
+- `playback/`: the order a film comes in: a release AllDebrid has plays from
+  it without libtorrent starting; none cached, signed out, or a bad key fall
+  back to the torrent (with the reason shown).
 - `update/`: picking the newest release and this CPU's APK, reading releases
   with the token, and downloading through GitHub's redirect without the token
   following it.

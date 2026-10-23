@@ -194,28 +194,28 @@ fun WifiScreen(
         Box(Modifier.weight(1f)) {
             when {
                 !canConnectInApp -> Column {
-                    Note("This version of Android doesn't let apps join Wi-Fi themselves. Use the system's Wi-Fi panel.")
+                    SetupNote("This version of Android doesn't let apps join Wi-Fi themselves. Use the system's Wi-Fi panel.")
                     Spacer(Modifier.height(12.dp))
-                    PrimaryButton("Open Wi-Fi settings", onClick = onOpenSystemWifi)
+                    SetupButton("Open Wi-Fi settings", onClick = onOpenSystemWifi)
                 }
                 !state.enabled -> Column {
-                    Note("Wi-Fi is off.")
+                    SetupNote("Wi-Fi is off.")
                     Spacer(Modifier.height(12.dp))
-                    PrimaryButton("Turn on Wi-Fi", onClick = onTurnOn)
+                    SetupButton("Turn on Wi-Fi", onClick = onTurnOn)
                 }
                 else -> LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     if (!state.locationPermission) {
                         item {
-                            Note(
+                            SetupNote(
                                 "Android only lists nearby networks for apps allowed to use location. " +
                                     "Allow it to see them, or add your network by name below.",
                                 action = "Allow" to onAllowLocation,
                             )
                         }
                     } else if (!state.locationOn) {
-                        item { Note("Location is turned off on this device, so nearby networks can't be listed. Add your network by name below.") }
+                        item { SetupNote("Location is turned off on this device, so nearby networks can't be listed. Add your network by name below.") }
                     } else if (state.networks.isEmpty()) {
-                        item { Note("Looking for networks…") }
+                        item { SetupNote("Looking for networks…") }
                     }
                     items(state.networks, key = { it.ssid }) { network ->
                         NetworkRow(
@@ -253,12 +253,12 @@ fun WifiScreen(
 
         Spacer(Modifier.height(12.dp))
         if (setup) {
-            PrimaryButton(if (state.online) "Continue" else "Continue once connected", enabled = state.online, onClick = onContinue)
+            SetupButton(if (state.online) "Continue" else "Continue once connected", enabled = state.online, onClick = onContinue)
             TextButton(onClick = onSkip, modifier = Modifier.align(Alignment.CenterHorizontally)) {
                 Text("Skip for now", color = Night.Muted)
             }
         } else {
-            PrimaryButton("Done", onClick = onBack)
+            SetupButton("Done", onClick = onBack)
         }
         Spacer(Modifier.height(12.dp))
     }
@@ -295,7 +295,7 @@ private fun NetworkRow(
     onClick: () -> Unit,
     onConnect: (String) -> Unit,
 ) {
-    Card {
+    SetupCard {
         Row(
             Modifier
                 .fillMaxWidth()
@@ -355,7 +355,7 @@ private fun OtherNetworkRow(
     var name by rememberSaveable { mutableStateOf("") }
     var password by rememberSaveable { mutableStateOf("") }
     val focus = LocalFocusManager.current
-    Card {
+    SetupCard {
         Row(
             Modifier
                 .fillMaxWidth()
@@ -378,7 +378,7 @@ private fun OtherNetworkRow(
                 }
                 Spacer(Modifier.height(12.dp))
                 val busy = connecting != null && connecting == name.trim()
-                PrimaryButton(
+                SetupButton(
                     if (busy) "Connecting…" else "Connect",
                     enabled = name.isNotBlank() && !busy && (password.isEmpty() || password.length >= 8),
                 ) {
@@ -403,7 +403,7 @@ private fun PasswordEntry(minLength: Int, connecting: Boolean, onConnect: (Strin
             }
         }
         Spacer(Modifier.height(12.dp))
-        PrimaryButton(if (connecting) "Connecting…" else "Connect", enabled = ready) {
+        SetupButton(if (connecting) "Connecting…" else "Connect", enabled = ready) {
             focus.clearFocus()
             onConnect(password)
         }
@@ -448,7 +448,7 @@ private fun Field(
 }
 
 @Composable
-private fun Card(content: @Composable () -> Unit) {
+internal fun SetupCard(content: @Composable () -> Unit) {
     Column(
         Modifier
             .fillMaxWidth()
@@ -459,8 +459,8 @@ private fun Card(content: @Composable () -> Unit) {
 }
 
 @Composable
-private fun Note(text: String, action: Pair<String, () -> Unit>? = null) {
-    Card {
+internal fun SetupNote(text: String, action: Pair<String, () -> Unit>? = null) {
+    SetupCard {
         Column(Modifier.padding(16.dp)) {
             Text(text, color = Night.Muted, fontSize = 14.sp)
             action?.let { (label, onClick) ->
@@ -471,7 +471,7 @@ private fun Note(text: String, action: Pair<String, () -> Unit>? = null) {
 }
 
 @Composable
-private fun PrimaryButton(text: String, enabled: Boolean = true, onClick: () -> Unit) {
+internal fun SetupButton(text: String, enabled: Boolean = true, onClick: () -> Unit) {
     Button(
         onClick = onClick,
         enabled = enabled,
