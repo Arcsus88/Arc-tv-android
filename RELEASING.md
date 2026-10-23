@@ -39,6 +39,12 @@ devices take that release with the old token and carry on with the new one.
 
 Then Actions → Release → Run workflow (or push to `main`).
 
+**Before the secrets are added**, each push publishes a *preview* instead: a
+prerelease tagged `preview` (replaced every time) whose APKs are signed with a
+throwaway key and carry no update token. It's there to look at and try; it
+never updates itself, the updater ignores it, and it can't be updated into a
+real release, so uninstall it before installing one.
+
 ## The signing key
 
 Android installs an update only if it's signed with the same key as the app
