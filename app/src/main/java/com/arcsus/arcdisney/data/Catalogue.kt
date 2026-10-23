@@ -4,7 +4,7 @@ import kotlinx.serialization.Serializable
 import java.net.URLEncoder
 import java.util.Locale
 
-/** One torrent of a film, as found on The Pirate Bay. */
+/** One torrent of a film, as found on The Pirate Bay or Knaben. */
 @Serializable
 data class Release(
     val name: String,

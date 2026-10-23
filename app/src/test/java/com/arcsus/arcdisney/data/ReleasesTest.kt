@@ -27,6 +27,34 @@ class ReleasesTest {
     }
 
     @Test
+    fun searchFormForEachSite() {
+        assertEquals("Lilo and Stitch", searchForm("Lilo & Stitch"))
+        assertEquals("WALL E", searchForm("WALL·E"))
+        assertEquals("Teacher s Pet", searchForm("Teacher's Pet"))
+        assertEquals("Teacher's Pet", searchForm("Teacher’s Pet", keepApostrophes = true))
+        assertEquals("Pokemon The Movie", searchForm("Pokémon: The 'Movie'", keepApostrophes = true))
+    }
+
+    @Test
+    fun namedAsNeedsTheTitleFirstThenTheYear() {
+        assertTrue(namedAs("[YTS.MX] Aladdin (1992) 1080p BRRip", "Aladdin", 1992))
+        assertTrue(namedAs("Disney Movie - Amy 1981", "Amy", 1981))
+        assertTrue(namedAs("Kidnapped  (Action 1960)  Peter Finch  720p", "Kidnapped", 1960))
+        assertTrue(namedAs("Alice In Wonderland - Johnny Depp 2010 Eng Subs 1080p", "Alice in Wonderland", 2010))
+        assertTrue(namedAs("The.Lion.King.2.Simbas.Pride.1998.1080p", "The Lion King II: Simba's Pride", 1998))
+        assertTrue(namedAs("Zombies.2018.1080p.WEB", "Z-O-M-B-I-E-S", 2018))
+        assertTrue(namedAs("Fantasia 2000 (1999) 720p BrRip", "Fantasia 2000", 2000))
+        assertFalse(namedAs("Tiger.3.2023.1080p", "Tiger", 2024))
+        assertFalse(namedAs("Under.Wraps.2.2022.1080p", "Under Wraps", 2021))
+        assertFalse(namedAs("The.Elephant.Queen.2019.1080p", "Elephant", 2020))
+        assertFalse(namedAs("Care.Bears.2014.720p", "Bears", 2014))
+        assertFalse(namedAs("Return.to.Halloweentown.2006.1080p", "Halloweentown", 1998))
+        assertFalse(namedAs("The Prime Of Miss Jean Brodie (1969) Maggie Smith", "Smith!", 1969))
+        assertFalse(namedAs("Old Yeller 1957 Savage Sam 1963 DVDRip", "Savage Sam", 1963))
+        assertFalse(namedAs("The.Lion.King.2019.1080p", "The Lion King", 1994))
+    }
+
+    @Test
     fun filtersCamsPacksExtrasAndTv() {
         assertTrue(isCam("Moana.2.2024.HDCAM.x264"))
         assertTrue(isCam("Wish.2023.TS.XviD"))

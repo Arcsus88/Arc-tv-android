@@ -8,6 +8,7 @@ import com.arcsus.arcdisney.BuildConfig
 import com.arcsus.arcdisney.data.Catalogue
 import com.arcsus.arcdisney.data.CatalogueUpdater
 import com.arcsus.arcdisney.data.Film
+import com.arcsus.arcdisney.data.Knaben
 import com.arcsus.arcdisney.data.PirateBay
 import com.arcsus.arcdisney.data.Tmdb
 import com.arcsus.arcdisney.data.matches
@@ -243,6 +244,7 @@ class DisneyViewModel(app: Application) : AndroidViewModel(app) {
         val updater = CatalogueUpdater(
             bay = PirateBay(graph.http),
             tmdb = key.takeIf { it.isNotBlank() }?.let { Tmdb(graph.http, it) },
+            knaben = Knaben(graph.http),
         )
         _update.value = if (key.isNotBlank()) Update.FindingFilms else Update.Searching(0, 0)
         try {

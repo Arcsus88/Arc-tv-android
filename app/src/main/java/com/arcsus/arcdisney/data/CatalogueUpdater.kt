@@ -14,7 +14,7 @@ import java.time.ZoneOffset
 /**
  * The update button, done on the phone instead of the arc-disney backend:
  * TMDB for any Disney films the catalogue lacks ("sync"), then The Pirate
- * Bay for their releases ("scan"). Like the backend, films that already
+ * Bay and Knaben for their releases ("scan"). Like the backend, films that already
  * have seeded releases keep them and are never searched again. Films that
  * came up empty are tried again after a while, since new films often have
  * no releases until their digital release.
@@ -23,6 +23,8 @@ class CatalogueUpdater(
     private val bay: PirateBay,
     /** Null without a TMDB key: then only the releases are searched. */
     private val tmdb: Tmdb?,
+    /** A second place to look for releases; null searches The Pirate Bay alone. */
+    private val knaben: Knaben? = null,
     private val now: () -> Long = System::currentTimeMillis,
     private val concurrency: Int = 4,
 ) {
@@ -128,7 +130,7 @@ class CatalogueUpdater(
         val newlyPlayable = result.films.count { it.playable && it.id !in wasPlayable }
         val error = when {
             due.isNotEmpty() && done == 0 && failed > 0 ->
-                "Couldn't search The Pirate Bay (${lastError ?: "no answer"}). It may be blocked on this network."
+                "Couldn't search for releases (${lastError ?: "no answer"}). The sites may be blocked on this network."
             syncError != null -> syncError
             failed > 0 -> "$failed of ${due.size} searches failed; they'll be tried again next time."
             else -> null
@@ -146,7 +148,11 @@ class CatalogueUpdater(
         return now - last >= if (recent) RETRY_RECENT_MS else RETRY_OLD_MS
     }
 
-    /** IMDb-tagged uploads are exact; a title + year search fills in when few are tagged. */
+    /**
+     * IMDb-tagged uploads are exact; a title + year search fills in when few
+     * are tagged, then Knaben when The Pirate Bay has few seeded. The film
+     * counts as searched if either site answered.
+     */
     private suspend fun scan(f: Film): Pair<String?, List<Release>> {
         val imdb = f.imdb ?: tmdb?.let {
             try {
@@ -157,17 +163,28 @@ class CatalogueUpdater(
         }
         val year = f.year.toIntOrNull() ?: 0
         val found = LinkedHashMap<String, Release>()
+        var answered = false
+        var failure: IOException? = null
+        suspend fun search(find: suspend () -> List<Release>, keep: (Release) -> Boolean) {
+            try {
+                find().filter(keep).forEach { found.putIfAbsent(it.hash, it) }
+                answered = true
+            } catch (e: IOException) {
+                failure = e
+            }
+        }
+        val named: (Release) -> Boolean = { if (year > 0) namedAs(it.name, f.title, year) else titleMatches(it.name, f.title) }
+        val withYear = if (year > 0) " $year" else ""
+        val query = searchForm(f.title) + withYear
+
         if (imdb != null) {
-            bay.search(imdb)
-                .filter { titleMatches(it.name, f.title) || (year > 0 && yearMatches(it.name, year)) }
-                .forEach { found.putIfAbsent(it.hash, it) }
+            search({ bay.search(imdb) }) { titleMatches(it.name, f.title) || (year > 0 && yearMatches(it.name, year)) }
         }
-        if (found.size < 3) {
-            val query = searchForm(f.title) + if (year > 0) " $year" else ""
-            bay.search(query)
-                .filter { titleMatches(it.name, f.title) && (year == 0 || yearMatches(it.name, year)) }
-                .forEach { found.putIfAbsent(it.hash, it) }
+        if (found.size < 3) search({ bay.search(query) }, named)
+        if (knaben != null && found.values.count { it.seeds > 0 } < 3) {
+            search({ knaben.search(searchForm(f.title, keepApostrophes = true) + withYear) }, named)
         }
+        if (!answered) throw failure ?: IOException("No search answered.")
         return imdb to rankReleases(found.values.toList())
     }
 
