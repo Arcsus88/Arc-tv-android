@@ -13,6 +13,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -71,19 +72,22 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import com.arcsus.arcdisney.R
 import com.arcsus.arcdisney.data.Film
 import com.arcsus.arcdisney.ui.theme.Night
 
 /**
  * Every playable film as a wall of posters, with nothing above it but the
- * search bar and the update button.
+ * search bar, a small Disney logo and the update button.
  */
 @Composable
 fun PosterWall(
@@ -119,6 +123,12 @@ fun PosterWall(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 SearchField(query, onQuery, Modifier.weight(1f))
+                Spacer(Modifier.width(12.dp))
+                Image(
+                    painter = painterResource(R.drawable.logo_disney),
+                    contentDescription = "Disney",
+                    modifier = Modifier.height(24.dp).aspectRatio(476f / 200f),
+                )
                 Spacer(Modifier.width(10.dp))
                 UpdateButton(
                     busy = update != DisneyViewModel.Update.Idle,
@@ -191,7 +201,9 @@ private fun SearchField(query: String, onQuery: (String) -> Unit, modifier: Modi
         Icon(Icons.Default.Search, contentDescription = null, tint = Night.Muted, modifier = Modifier.size(20.dp))
         Spacer(Modifier.width(10.dp))
         Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
-            if (query.isEmpty()) Text("Search Disney films", color = Night.Muted, fontSize = 16.sp)
+            if (query.isEmpty()) {
+                Text("Search Disney films", color = Night.Muted, fontSize = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
             BasicTextField(
                 value = query,
                 onValueChange = onQuery,

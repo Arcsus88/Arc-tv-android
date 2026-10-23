@@ -110,6 +110,25 @@ class ScreensTest {
         )
     }
 
+    /** The header on a narrow phone: search bar, logo and update button still fit on one row. */
+    @Test
+    @Config(qualifiers = "w360dp-h740dp-xhdpi")
+    fun wallOnASmallPhone() = shoot("18-wall-small-phone") {
+        PosterWall(
+            films = films,
+            query = "",
+            onQuery = {},
+            update = DisneyViewModel.Update.Idle,
+            message = null,
+            online = true,
+            onUpdate = {},
+            onOpenWifi = {},
+            onAllDebrid = {},
+            onTmdbKey = {},
+            onPlay = {},
+        )
+    }
+
     @Test
     fun wallSearchingAndUpdating() = shoot("3-wall-search-update") {
         PosterWall(
