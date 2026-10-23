@@ -110,7 +110,7 @@ class ScreensTest {
         )
     }
 
-    /** The header on a narrow phone: search bar, logo and update button still fit on one row. */
+    /** The header on a narrow phone: logo, search bar and update button still fit on one row. */
     @Test
     @Config(qualifiers = "w360dp-h740dp-xhdpi")
     fun wallOnASmallPhone() = shoot("18-wall-small-phone") {

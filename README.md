@@ -2,8 +2,8 @@
 
 An Android phone app for the Disney catalogue from Arc TV, with everything on the
 phone: no backend, and no shared debrid account. It opens on a Disney splash that
-fades into a wall of posters, with nothing above them but a search bar, a small
-Disney logo and an update button. Tapping a poster plays the film in VLC, which is built into the
+fades into a wall of posters, with nothing above them but a small Disney logo,
+a search bar and an update button. Tapping a poster plays the film in VLC, which is built into the
 app, so playback never leaves it: from the device's own AllDebrid account when
 it's signed in to one and AllDebrid has the film (full speed), otherwise by
 torrent, streamed on the phone.

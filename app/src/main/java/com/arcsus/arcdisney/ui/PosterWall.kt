@@ -86,8 +86,8 @@ import com.arcsus.arcdisney.data.Film
 import com.arcsus.arcdisney.ui.theme.Night
 
 /**
- * Every playable film as a wall of posters, with nothing above it but the
- * search bar, a small Disney logo and the update button.
+ * Every playable film as a wall of posters, with nothing above it but a
+ * small Disney logo, the search bar and the update button.
  */
 @Composable
 fun PosterWall(
@@ -122,13 +122,13 @@ fun PosterWall(
                     .padding(start = 14.dp, end = 14.dp, top = 10.dp, bottom = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                SearchField(query, onQuery, Modifier.weight(1f))
-                Spacer(Modifier.width(12.dp))
                 Image(
                     painter = painterResource(R.drawable.logo_disney),
                     contentDescription = "Disney",
                     modifier = Modifier.height(24.dp).aspectRatio(476f / 200f),
                 )
+                Spacer(Modifier.width(12.dp))
+                SearchField(query, onQuery, Modifier.weight(1f))
                 Spacer(Modifier.width(10.dp))
                 UpdateButton(
                     busy = update != DisneyViewModel.Update.Idle,
