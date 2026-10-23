@@ -25,7 +25,8 @@ import java.util.concurrent.TimeUnit
  * adds films from a tab-separated list (tmdb id, year, imdb id, poster path,
  * popularity, title). An existing snapshot is updated in place: films with
  * seeded releases keep them, the rest are searched (-DsnapshotRetry=true
- * searches films that came up empty again now, rather than when due).
+ * searches films that came up empty again now, rather than when due, unless
+ * they were searched in the last six hours).
  */
 class GenerateSnapshot {
 
@@ -55,7 +56,12 @@ class GenerateSnapshot {
         }
 
         if (System.getProperty("snapshotRetry") == "true") {
-            catalogue = catalogue.copy(films = catalogue.films.map { if (it.seeded) it else it.copy(scannedAt = null) })
+            val recently = System.currentTimeMillis() - TimeUnit.HOURS.toMillis(6)
+            catalogue = catalogue.copy(
+                films = catalogue.films.map { f ->
+                    if (f.seeded || (f.attemptedAt ?: 0) > recently) f else f.copy(scannedAt = null)
+                },
+            )
         }
 
         val client = OkHttpClient.Builder().readTimeout(40, TimeUnit.SECONDS).build()
