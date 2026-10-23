@@ -60,6 +60,60 @@ fun titleMatches(name: String, title: String): Boolean {
 fun yearMatches(name: String, year: Int): Boolean =
     Regex("(?<!\\d)(19[2-9]\\d|20[0-3]\\d)(?!\\d)").findAll(name).any { kotlin.math.abs(it.value.toInt() - year) <= 1 }
 
+private val NUMERALS = mapOf("ii" to "2", "iii" to "3", "iv" to "4")
+private val LEADING_TAG = Regex("^\\s*(?:\\[[^\\]]*\\]|\\([^)]*\\)|\\{[^}]*\\}|www\\.\\S+)\\s*[-:]?\\s*")
+private val DISNEY_PREFIXES = listOf(
+    listOf("walt", "disney", "s", "classic"), listOf("walt", "disney", "classic"), listOf("walt", "disney", "s"),
+    listOf("walt", "disneys"), listOf("walt", "disney"), listOf("disney", "s"), listOf("disneys"), listOf("disney", "movie"),
+    listOf("disney"),
+)
+
+/** What may sit between a one-word title and its year: "Kidnapped (Action 1960)". */
+private val FILLER = setOf(
+    "action", "adventure", "animation", "animated", "comedy", "com", "drama", "west", "western", "westen", "family",
+    "documentary", "doc", "mystery", "sci", "fi", "scifi", "horror", "musical", "music", "romance", "fantasy", "thriller",
+    "war", "crime", "film", "movie", "aka",
+)
+
+private fun nameWords(s: String): List<String> =
+    normTitle(s.replace('_', ' ')).split(' ').filter { it.isNotEmpty() && it !in STOP }.map { NUMERALS[it] ?: it }
+
+/**
+ * For releases found by searching the title: the name starts with the title
+ * (after a "[site]" tag or "Disney's"), isn't a sequel of it, and carries the
+ * year (±1) somewhere after. So "Aladdin (1992) 1080p" and "Disney Movie - Amy
+ * 1981" match, but "Tiger.3.2023" isn't Tiger (2024), "Under.Wraps.2.2022"
+ * isn't Under Wraps (2021), and "The Prime of Miss Jean Brodie (1969) Maggie
+ * Smith" isn't Smith! (1969). Words are compared run together, so "Simbas"
+ * matches "Simba's" and "Zombies" matches "Z-O-M-B-I-E-S".
+ */
+fun namedAs(name: String, title: String, year: Int): Boolean {
+    var rest = name
+    while (true) {
+        val tag = LEADING_TAG.find(rest)?.takeIf { it.value.isNotEmpty() } ?: break
+        rest = rest.substring(tag.range.last + 1)
+    }
+    val words = nameWords(rest)
+    val titleWords = nameWords(title)
+    val want = titleWords.joinToString("")
+    if (want.isEmpty()) return false
+    val starts = listOf(0) + DISNEY_PREFIXES
+        .filter { p -> words.take(p.size) == p && !want.startsWith(p.joinToString("")) }
+        .map { it.size }
+    return starts.any { start ->
+        var i = start
+        val seen = StringBuilder()
+        while (i < words.size && seen.length < want.length) seen.append(words[i++])
+        if (seen.toString() != want) return@any false
+        val after = words.drop(i)
+        if (after.firstOrNull()?.let { it.length == 1 && it[0] in '2'..'9' } == true) return@any false
+        val at = after.indexOfFirst { w ->
+            w.length == 4 && w.all(Char::isDigit) && w.toInt() in 1920..2039 && kotlin.math.abs(w.toInt() - year) <= 1
+        }
+        at >= 0 && (titleWords.size > 1 || after.take(at).all { it in FILLER })
+    }
+}
+
 private val FOREIGN = Regex(
     "\\b(multi|dual|french|truefrench|vff|vfq|vf2|ita|italian|german|spanish|castellano|latino|hindi|tamil|" +
         "telugu|russian|polish|dublado|nordic|swedish|korean|turkish)\\b",

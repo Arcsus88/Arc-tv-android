@@ -28,9 +28,8 @@ class Tmdb(
     private val json = Json { ignoreUnknownKeys = true }
 
     /**
-     * Every feature film from Walt Disney Pictures / Productions / Animation
-     * Studios and Pixar (TMDB credits Pixar's features to Pixar alone), out
-     * by [today], most popular first.
+     * Every Disney-branded and Pixar film of 40 minutes or more (see
+     * [COMPANIES]), out by [today], most popular first.
      */
     suspend fun disneyFilms(today: LocalDate = LocalDate.now()): List<Film> = withContext(Dispatchers.IO) {
         val byId = LinkedHashMap<Int, Film>()
@@ -90,7 +89,15 @@ class Tmdb(
     private fun JsonObject.int(k: String): Int? = str(k)?.toDoubleOrNull()?.toInt()
 
     private companion object {
-        /** Walt Disney Pictures | Walt Disney Productions | Walt Disney Animation Studios | Pixar. */
-        const val COMPANIES = "2|3166|6125|3"
+        /**
+         * Walt Disney Pictures | Walt Disney Productions | Walt Disney Animation
+         * Studios (and its second entry) | Pixar (TMDB credits Pixar's features
+         * to Pixar alone) | Walt Disney Feature Animation (TMDB's home for The
+         * Little Mermaid to Brother Bear) | Walt Disney Animation (two entries) |
+         * DisneyToon Studios | Disney Television Animation | Walt Disney Television
+         * | Disney Channel | Disney Branded Television | Disneynature. Not
+         * Touchstone, Marvel, Lucasfilm or 20th Century.
+         */
+        const val COMPANIES = "2|3166|6125|158526|3|171656|112779|177000|5391|3475|670|240533|241784|4436"
     }
 }

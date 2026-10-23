@@ -4,6 +4,7 @@ import com.arcsus.arcdisney.data.Catalogue
 import com.arcsus.arcdisney.data.CatalogueStore
 import com.arcsus.arcdisney.data.CatalogueUpdater
 import com.arcsus.arcdisney.data.Film
+import com.arcsus.arcdisney.data.Knaben
 import com.arcsus.arcdisney.data.PirateBay
 import com.arcsus.arcdisney.data.Tmdb
 import kotlinx.coroutines.runBlocking
@@ -23,7 +24,8 @@ import java.util.concurrent.TimeUnit
  * With TMDB_API_KEY set it also asks TMDB for new films. -DsnapshotSeed=films.tsv
  * adds films from a tab-separated list (tmdb id, year, imdb id, poster path,
  * popularity, title). An existing snapshot is updated in place: films with
- * seeded releases keep them, the rest are searched.
+ * seeded releases keep them, the rest are searched (-DsnapshotRetry=true
+ * searches films that came up empty again now, rather than when due).
  */
 class GenerateSnapshot {
 
@@ -52,10 +54,14 @@ class GenerateSnapshot {
             catalogue = catalogue.copy(films = seeded + catalogue.films.filter { it.id !in seededIds })
         }
 
+        if (System.getProperty("snapshotRetry") == "true") {
+            catalogue = catalogue.copy(films = catalogue.films.map { if (it.seeded) it else it.copy(scannedAt = null) })
+        }
+
         val client = OkHttpClient.Builder().readTimeout(40, TimeUnit.SECONDS).build()
         val tmdb = System.getenv("TMDB_API_KEY")?.takeIf { it.isNotBlank() }?.let { Tmdb(client, it) }
         val limit = System.getProperty("snapshotLimit")?.toIntOrNull() ?: Int.MAX_VALUE
-        val updater = CatalogueUpdater(PirateBay(client), tmdb, concurrency = 3)
+        val updater = CatalogueUpdater(PirateBay(client), tmdb, Knaben(client), concurrency = 3)
 
         val result = runBlocking {
             updater.update(

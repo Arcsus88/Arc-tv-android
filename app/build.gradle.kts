@@ -146,7 +146,7 @@ tasks.withType<Test>().configureEach {
     val so = layout.buildDirectory.file("libtorrent-linux/libtorrent4j.so")
     doFirst { systemProperty("libtorrent4j.jni.path", so.get().asFile.absolutePath) }
     // The snapshot generator (see README) is opt-in; pass its switches through.
-    listOf("generateSnapshot", "snapshotSeed", "snapshotLimit", "posterDir").forEach { key ->
+    listOf("generateSnapshot", "snapshotSeed", "snapshotLimit", "snapshotRetry", "posterDir").forEach { key ->
         System.getProperty(key)?.let { systemProperty(key, it) }
     }
     System.getenv("TMDB_API_KEY")?.let { environment("TMDB_API_KEY", it) }

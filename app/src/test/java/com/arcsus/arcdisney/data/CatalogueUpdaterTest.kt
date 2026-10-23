@@ -24,11 +24,32 @@ class CatalogueUpdaterTest {
     private val server = MockWebServer()
     private val client = OkHttpClient()
     private val bayQueries = CopyOnWriteArrayList<String>()
+    private val knabenQueries = CopyOnWriteArrayList<String>()
     private var bayBlocked = false
     private val now = 1_800_000_000_000L
 
     private fun bayRow(name: String, hash: Char, seeds: Int, category: String = "207") =
         """{"name":"$name","info_hash":"${hash.toString().repeat(40)}","seeders":"$seeds","size":"2147483648","category":"$category"}"""
+
+    private fun knabenHit(title: String, hash: Char, seeds: Int, live: Int? = null, categories: String = "[3001000,3000000]") =
+        """{"title":"$title","hash":"${hash.uppercase().repeat(40)}","seeders":$seeds,"liveSeeders":${live ?: "null"},""" +
+            """"bytes":1438814044,"categoryId":$categories,"tracker":"YTS"}"""
+
+    private fun knabenAnswer(query: String): String {
+        val hits = when (query) {
+            "Hercules 1997" -> listOf(
+                knabenHit("Hercules (1997) 1080p BRRip x264 -YTS", 'a', 100, live = 130),
+                knabenHit("Hercules (2014) 1080p BrRip x264 - YIFY", 'b', 77),
+                knabenHit("Hercules 1997 1998 Animated Series", 'c', 20, categories = "[2000000]"),
+            )
+            "Tiger 2024" -> listOf(
+                knabenHit("Tiger.3.2023.1080p.AMZN.WEB-DL", 'd', 300),
+                knabenHit("Tiger.2024.1080p.DSNP.WEB-DL", 'e', 9),
+            )
+            else -> emptyList()
+        }
+        return """{"hits":[${hits.joinToString(",")}],"total":{"value":${hits.size}}}"""
+    }
 
     @Before
     fun setUp() {
@@ -52,6 +73,11 @@ class CatalogueUpdaterTest {
                             )
                         }
                     }
+                    "/v1" -> {
+                        val q = Regex("\"query\":\"([^\"]*)\"").find(request.body.readUtf8())!!.groupValues[1]
+                        knabenQueries += q
+                        MockResponse().setBody(knabenAnswer(q))
+                    }
                     "/3/discover/movie" -> MockResponse().setBody(
                         """{"page":1,"total_pages":1,"results":[
                             {"id":1,"title":"Moana","release_date":"2016-11-23","poster_path":"/moana.jpg","popularity":90.5},
@@ -69,9 +95,10 @@ class CatalogueUpdaterTest {
     @After
     fun tearDown() = server.shutdown()
 
-    private fun updater(withTmdb: Boolean = true) = CatalogueUpdater(
+    private fun updater(withTmdb: Boolean = true, withKnaben: Boolean = false) = CatalogueUpdater(
         bay = PirateBay(client, server.url("/").toString().trimEnd('/')),
         tmdb = if (withTmdb) Tmdb(client, "key", server.url("/3").toString()) else null,
+        knaben = if (withKnaben) Knaben(client, server.url("/").toString().trimEnd('/')) else null,
         now = { now },
     )
 
@@ -127,6 +154,33 @@ class CatalogueUpdaterTest {
         assertTrue(tried.isNotEmpty() && tried.size < films.size)
         assertTrue(bayQueries.size < films.size)
         assertFalse(result.catalogue.films.any { it.playable })
+    }
+
+    @Test
+    fun knabenFillsInWhereThePirateBayHasNothing() = runTest {
+        val hercules = Film(id = 5, title = "Hercules", year = "1997")
+        val tiger = Film(id = 6, title = "Tiger", year = "2024")
+        val result = updater(withTmdb = false, withKnaben = true).update(Catalogue(films = listOf(hercules, tiger)))
+        assertNull(result.error)
+        assertEquals(listOf("Hercules 1997", "Tiger 2024"), bayQueries.sorted())
+        assertEquals(listOf("Hercules 1997", "Tiger 2024"), knabenQueries.sorted())
+        // The 2014 film and the series are left out; YTS's capped seed count gives way to the live one.
+        val found = result.catalogue.films.first { it.id == 5 }.releases
+        assertEquals(listOf("a".repeat(40)), found.map { it.hash })
+        assertEquals(130, found.single().seeds)
+        // Tiger 3 (2023) is a different film, however well seeded.
+        assertEquals(listOf("e".repeat(40)), result.catalogue.films.first { it.id == 6 }.releases.map { it.hash })
+    }
+
+    @Test
+    fun knabenStandsInWhenThePirateBayIsBlocked() = runTest {
+        bayBlocked = true
+        val films = listOf(Film(id = 5, title = "Hercules", year = "1997"))
+        val result = updater(withTmdb = false, withKnaben = true).update(Catalogue(films = films))
+        assertNull(result.error)
+        val hercules = result.catalogue.films.single()
+        assertEquals(now, hercules.scannedAt)
+        assertTrue(hercules.playable)
     }
 
     @Test

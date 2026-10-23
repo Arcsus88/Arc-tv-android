@@ -11,7 +11,7 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.io.IOException
 
-/** The Pirate Bay could not be searched: blocked, down, or answering with something else. */
+/** A release search could not be done: the site is blocked, down, or answering with something else. */
 class SearchUnavailableException(message: String) : IOException(message)
 
 /** The Pirate Bay's JSON API (apibay.org), filtered to single films worth streaming. */

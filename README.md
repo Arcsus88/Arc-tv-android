@@ -14,9 +14,17 @@ Android 8.0 and later.
 
 ## How it works
 
-**The catalogue** is every Disney-branded and Pixar feature from TMDB (Walt Disney
-Pictures / Productions / Animation Studios and Pixar), each with its best Pirate
-Bay releases. A snapshot ships in the APK (`app/src/main/assets/disney.json`), so a
+**The catalogue** is every Disney-branded and Pixar film from TMDB, each with its
+best releases from The Pirate Bay and Knaben. "Disney-branded" means the studios
+TMDB credits: Walt Disney Pictures, Productions, Animation Studios and Feature
+Animation (TMDB's home for The Little Mermaid to Brother Bear), Pixar,
+DisneyToon (the sequels, Tinker Bell, Planes), Disney Television Animation,
+Walt Disney Television, Disney Channel, Disney Branded Television and
+Disneynature, at 40 minutes or longer. Not Touchstone, Marvel, Lucasfilm or
+20th Century, except that the snapshot adds The Nightmare Before Christmas, Who
+Framed Roger Rabbit, and the Disney Channel Original Movies TMDB files under
+other studios (High School Musical, Halloweentown, Zombies, Descendants 3…).
+A snapshot ships in the APK (`app/src/main/assets/disney.json`), so a
 fresh install has all of it without searching anything. The wall shows only
 films with a seeded release; search matches title and year as you type,
 ignoring accents and punctuation ("wall e" finds WALL·E).
@@ -26,17 +34,26 @@ ignoring accents and punctuation ("wall e" finds WALL·E).
 
 - With a TMDB key it asks TMDB for Disney films the phone doesn't have yet.
 - It searches The Pirate Bay's JSON API (by IMDb id, then title + year) for
-  films never searched, and re-checks films that came up empty: after 3 days
-  for this year's and last year's films (new films often have nothing until
-  their digital release), after 30 days for older ones. Films that already
-  have seeded releases keep them.
+  films never searched, then Knaben's (`data/Knaben.kt`, title + year) when
+  that found fewer than three seeded. Knaben searches many sites' uploads, YTS
+  and The Pirate Bay among them, so it finds films apibay doesn't have and
+  keeps working when apibay is down. Films that came up empty are re-checked
+  after 3 days for this year's and last year's films (new films often have
+  nothing until their digital release), after 30 days for older ones. Films
+  that already have seeded releases keep them.
 - Releases are filtered as the backend filtered them (cams, packs, extras and
-  TV-shaped names out; a name search must match the title and year), then
-  ranked for streaming on a phone: seeded first, 1080p preferred, large files
-  (remuxes, 4K over 8 GB) and dubbed/MULTi releases pushed down, seeders as a
-  tiebreak. The top 8 are kept.
-- If The Pirate Bay can't be reached (it's blocked by most UK ISPs), the update
-  stops early and says so instead of marking films as having no seeds.
+  TV-shaped names out), then ranked for streaming on a phone: seeded first,
+  1080p preferred, large files (remuxes, 4K over 8 GB) and dubbed/MULTi
+  releases pushed down, seeders as a tiebreak. The top 8 are kept.
+- A release found by name must be named for the film (`namedAs`): the title
+  first (after a `[site]` tag or "Disney's"), not followed by a sequel number,
+  and the year (±1) after it; with a one-word title only a genre may come in
+  between. So "Aladdin (1992) 1080p" is Aladdin, but "Tiger.3.2023" isn't Tiger
+  (2024), "Under.Wraps.2.2022" isn't Under Wraps (2021) and "The.Elephant.Queen.2019"
+  isn't Elephant (2020). IMDb-tagged uploads only need the title or the year.
+- If neither site can be reached (The Pirate Bay is blocked by most UK ISPs),
+  the update stops early and says so instead of marking films as having no
+  seeds.
 
 There's no TMDB key in the source. Builds take one from `local.properties`
 (`tmdb.apiKey=…`, gitignored) or the `TMDB_API_KEY` environment variable. Without
@@ -104,7 +121,7 @@ once the device reaches the internet (Skip for now gets past it offline). A
 device already online at first run never sees the screen.
 
 Afterwards there's no Wi-Fi button in the header. Long-press the update button
-for a small menu (Wi-Fi, TMDB key), and when the device drops offline a
+for a small menu (Wi-Fi, AllDebrid account, TMDB key), and when the device drops offline a
 "No internet · Wi-Fi settings" pill appears over the posters.
 
 How it joins (`wifi/WifiController.kt`): Android 9 lets an app add a saved
@@ -155,9 +172,10 @@ from a published release. They don't check for updates either: that needs
 ./gradlew :app:testDebugUnitTest
 ```
 
-- `data/`: release filtering and ranking, the updater against a mock Pirate
-  Bay and TMDB (new films, kept releases, retry timing, a blocked site), and
-  the catalogue store's snapshot merging.
+- `data/`: release filtering, naming and ranking, the updater against a mock
+  Pirate Bay, Knaben and TMDB (new films, kept releases, retry timing, a
+  blocked site, Knaben filling in and standing in), and the catalogue store's
+  snapshot merging.
 - `torrent/`: the HTTP server's range handling; the real engine streaming a
   magnet from a libtorrent seeder on loopback, byte for byte with a seek; and,
   where ffmpeg is installed, a real H.264/AAC MP4 streamed by torrent and
@@ -195,7 +213,8 @@ TMDB_API_KEY=… ./gradlew :app:testDebugUnitTest --tests '*GenerateSnapshot*' -
 
 It updates `app/src/main/assets/disney.json` in place. Without `TMDB_API_KEY` it
 only searches releases; `-DsnapshotSeed=films.tsv` adds films from a
-tab-separated list (TMDB id, year, IMDb id, poster path, popularity, title).
+tab-separated list (TMDB id, year, IMDb id, poster path, popularity, title), and
+`-DsnapshotRetry=true` searches again now for films that came up empty.
 The first snapshot was seeded from the `arc_disney_titles` table: 684 films,
 419 of them playable. A phone that already has the app merges a newer snapshot
 in when the app is updated, without losing what its own updates found.
