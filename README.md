@@ -77,6 +77,17 @@ says so and the film streams by torrent as below. If VLC can't play
 AllDebrid's link, the torrent takes over too. The requests come from the
 device itself, as AllDebrid only serves links to the IP that asked for them.
 
+**Supercharging your streams** (`debrid/Supercharger.kt`): straight after
+signing in, a screen with a progress bar checks the wall's first 30 films on
+AllDebrid (each release asked about is removed from the account again) and
+remembers which release it has for each (`debrid/ReadyFilms.kt`). So the
+wait happens there, once, rather than on the launch screen: Play then goes
+straight to the release AllDebrid has, or straight to the torrent for a
+film it has none of. Every play remembers what it found too. The check is
+redone quietly when the app starts if it's more than 12 hours old, and
+anything older than that is asked about afresh. Skip carries on with it in
+the background.
+
 **Playing a film by torrent** (`torrent/`):
 
 - `TorrentEngine` runs libtorrent (via libtorrent4j) on the phone, with DHT,
@@ -196,10 +207,13 @@ from a published release. They don't check for updates either: that needs
   old entry, and networks it refuses.
 - `debrid/`: the AllDebrid PIN sign-in, account details, a cached release
   resolving to its largest file, an uncached one removed again, and account
-  errors keeping AllDebrid's reason.
+  errors keeping AllDebrid's reason; supercharging (stopping at the first
+  release AllDebrid has, nothing left in the account, an account problem
+  stopping it) and how long what it found is trusted.
 - `playback/`: the order a film comes in: a release AllDebrid has plays from
   it without libtorrent starting; none cached, signed out, or a bad key fall
-  back to the torrent (with the reason shown).
+  back to the torrent (with the reason shown); a supercharged film goes
+  straight to its release, or straight to the torrent.
 - `update/`: picking the newest release and this CPU's APK, reading releases
   with the token, and downloading through GitHub's redirect without the token
   following it.

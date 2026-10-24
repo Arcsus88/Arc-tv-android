@@ -363,4 +363,14 @@ class ScreensTest {
             onRetry = {},
         )
     }
+
+    @Test
+    fun supercharging() = shoot("20-supercharging") {
+        SuperchargeScreen(DisneyViewModel.Supercharge.Running(done = 18, total = 30, ready = 14), onSkip = {}, onContinue = {})
+    }
+
+    @Test
+    fun supercharged() = shoot("21-supercharged") {
+        SuperchargeScreen(DisneyViewModel.Supercharge.Done(ready = 26, total = 30), onSkip = {}, onContinue = {})
+    }
 }

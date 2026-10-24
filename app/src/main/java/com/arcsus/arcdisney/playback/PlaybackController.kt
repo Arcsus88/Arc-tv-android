@@ -5,6 +5,7 @@ import com.arcsus.arcdisney.data.Release
 import com.arcsus.arcdisney.debrid.AllDebrid
 import com.arcsus.arcdisney.debrid.AllDebridException
 import com.arcsus.arcdisney.debrid.NotCachedException
+import com.arcsus.arcdisney.debrid.ReadyFilms
 import com.arcsus.arcdisney.torrent.StreamState
 import com.arcsus.arcdisney.torrent.StreamStats
 import com.arcsus.arcdisney.torrent.TorrentEngine
@@ -35,6 +36,8 @@ class PlaybackController(
     private val allDebrid: AllDebrid? = null,
     /** This device's own AllDebrid key, "" when it isn't signed in. */
     private val allDebridKey: suspend () -> String = { "" },
+    /** Which release of each film AllDebrid has, from supercharging and earlier plays. */
+    private val ready: ReadyFilms? = null,
 ) {
     private val engine by lazy(engine)
 
@@ -82,10 +85,13 @@ class PlaybackController(
         index = 0
         lookup = scope.launch {
             val key = allDebridKey()
-            val note = if (allDebrid != null && key.isNotBlank() && cachedCandidates.isNotEmpty()) {
-                viaAllDebrid(allDebrid, key, film, cachedCandidates) ?: return@launch
-            } else {
-                null
+            val known = ready?.get(film.id)
+            val note = when {
+                allDebrid == null || key.isBlank() || cachedCandidates.isEmpty() -> null
+                // Checked lately and AllDebrid had none of them: no need to ask again.
+                known != null && known.hash == null -> NOT_ON_ALLDEBRID
+                // The one it has goes first.
+                else -> viaAllDebrid(allDebrid, key, film, cachedCandidates.sortedBy { it.hash != known?.hash }) ?: return@launch
             }
             if (candidates.isEmpty()) {
                 _ui.value = Ui(film, cachedCandidates.first(), 1, 1, Phase.Failed("${note.orEmpty()} No one is sharing it right now either.".trim()))
@@ -105,6 +111,7 @@ class PlaybackController(
             _ui.update { it?.copy(release = release, attempt = i + 1) }
             try {
                 val s = ad.resolve(key, release.magnet)
+                ready?.put(film.id, release.hash)
                 _ui.update { it?.copy(phase = Phase.Playing(s.url, s.fileName)) }
                 return null
             } catch (e: NotCachedException) {
@@ -115,7 +122,8 @@ class PlaybackController(
                 return "Couldn't reach AllDebrid, so streaming by torrent."
             }
         }
-        return "Not ready on AllDebrid yet, so streaming by torrent."
+        ready?.put(film.id, null)
+        return NOT_ON_ALLDEBRID
     }
 
     /** The launch screen's "Try another release", or VLC failing to open the file. */
@@ -193,5 +201,6 @@ class PlaybackController(
     private companion object {
         const val MAX_TRIES = 4
         const val MAX_DEBRID_TRIES = 5
+        const val NOT_ON_ALLDEBRID = "Not ready on AllDebrid yet, so streaming by torrent."
     }
 }

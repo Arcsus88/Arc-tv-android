@@ -25,9 +25,10 @@ import kotlinx.coroutines.flow.first
 private enum class Stage { SPLASH, SETUP, DEBRID, WALL }
 
 /**
- * Splash, then (on first run, if the device isn't online) Wi-Fi setup, then
- * the poster wall; the Wi-Fi screen, a film's launch screen and the player
- * go on top.
+ * Splash, then on first run Wi-Fi setup (if the device isn't online) and the
+ * AllDebrid offer, then the poster wall; the Wi-Fi and AllDebrid screens,
+ * "Supercharging your streams", a film's launch screen and the player go on
+ * top.
  */
 @Composable
 fun App(vm: DisneyViewModel) {
@@ -43,6 +44,7 @@ fun App(vm: DisneyViewModel) {
     val debrid by vm.debrid.collectAsStateWithLifecycle()
     val debridOffer by vm.debridOffer.collectAsStateWithLifecycle()
     val debridOpen by vm.debridOpen.collectAsStateWithLifecycle()
+    val supercharge by vm.supercharge.collectAsStateWithLifecycle()
 
     // The splash plays through once, and holds until the catalogue and settings are in.
     var splashDone by rememberSaveable { mutableStateOf(false) }
@@ -118,6 +120,13 @@ fun App(vm: DisneyViewModel) {
                 onContinue = vm::closeDebrid,
                 onBack = vm::closeDebrid,
             )
+        }
+
+        // After signing in to AllDebrid, over whichever AllDebrid screen it was.
+        var lastSupercharge by remember { mutableStateOf<DisneyViewModel.Supercharge?>(null) }
+        supercharge?.let { lastSupercharge = it }
+        AnimatedVisibility(visible = supercharge != null, enter = fadeIn(tween(400)), exit = fadeOut(tween(500))) {
+            lastSupercharge?.let { SuperchargeScreen(it, onSkip = vm::finishSupercharge, onContinue = vm::finishSupercharge) }
         }
 
         val ui = playback

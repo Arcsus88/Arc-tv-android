@@ -3,6 +3,7 @@ package com.arcsus.arcdisney.playback
 import com.arcsus.arcdisney.data.Film
 import com.arcsus.arcdisney.data.Release
 import com.arcsus.arcdisney.debrid.AllDebrid
+import com.arcsus.arcdisney.debrid.ReadyFilms
 import com.arcsus.arcdisney.playback.PlaybackController.Phase
 import com.arcsus.arcdisney.playback.PlaybackController.Source
 import com.arcsus.arcdisney.torrent.LoopbackSeeder
@@ -24,6 +25,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
+import java.io.File
 import java.nio.file.Files
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -37,6 +39,7 @@ class PlaybackControllerTest {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val root = Files.createTempDirectory("playback").toFile()
     private var engine: TorrentEngine? = null
+    private val ready = ReadyFilms(File(root, "ready.json"))
 
     private val film = Film(
         id = 1,
@@ -86,6 +89,7 @@ class PlaybackControllerTest {
         scope = scope,
         allDebrid = AllDebrid(OkHttpClient(), server.url("/v4").toString().trimEnd('/')),
         allDebridKey = { key },
+        ready = ready,
     )
 
     private fun PlaybackController.await(test: (PlaybackController.Ui) -> Boolean) = runBlocking {
@@ -102,6 +106,30 @@ class PlaybackControllerTest {
         assertEquals("https://cdn.example/Coco.mkv", (ui.phase as Phase.Playing).url)
         assertEquals("Coco.2017.720p.BluRay", ui.release.name)
         assertEquals(null, engine) // libtorrent never started
+        assertEquals("b".repeat(40), runBlocking { ready.get(1) }!!.hash) // remembered for next time
+        c.stop()
+    }
+
+    @Test
+    fun aReleaseKnownToBeOnAllDebridIsAskedForFirst() {
+        cachedHash = "b".repeat(40)
+        runBlocking { ready.put(1, "b".repeat(40)) } // supercharged
+        val c = controller("KEY")
+        c.play(film)
+        val ui = c.await { it.phase is Phase.Playing }
+        assertEquals(Source.ALLDEBRID, ui.source)
+        assertEquals(1, uploads.get()) // straight to it: the first release wasn't asked about
+        c.stop()
+    }
+
+    @Test
+    fun aFilmKnownNotToBeOnAllDebridGoesStraightToTheTorrent() {
+        runBlocking { ready.put(1, null) }
+        val c = controller("KEY")
+        c.play(film)
+        val ui = c.await { it.source == Source.TORRENT }
+        assertEquals(0, uploads.get())
+        assertTrue(ui.note!!.contains("Not ready on AllDebrid"))
         c.stop()
     }
 
@@ -112,6 +140,7 @@ class PlaybackControllerTest {
         val ui = c.await { it.source == Source.TORRENT }
         assertEquals(3, uploads.get()) // every release, seeded or not, was asked about
         assertTrue(ui.note!!.contains("Not ready on AllDebrid"))
+        assertEquals(ReadyFilms.Ready(null), runBlocking { ready.get(1) })
         assertEquals("Coco.2017.1080p.WEBRip", ui.release.name)
         assertEquals(2, ui.candidates) // the torrent only tries seeded releases
         c.stop()

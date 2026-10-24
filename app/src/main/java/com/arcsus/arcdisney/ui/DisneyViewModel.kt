@@ -14,6 +14,7 @@ import com.arcsus.arcdisney.data.Tmdb
 import com.arcsus.arcdisney.data.matches
 import com.arcsus.arcdisney.data.searchWords
 import com.arcsus.arcdisney.debrid.AllDebridAccount
+import com.arcsus.arcdisney.debrid.AllDebridException
 import com.arcsus.arcdisney.debrid.AllDebridPin
 import com.arcsus.arcdisney.playback.PlaybackController
 import kotlinx.coroutines.Job
@@ -23,8 +24,10 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.io.IOException
 
@@ -65,6 +68,7 @@ class DisneyViewModel(app: Application) : AndroidViewModel(app) {
         scope = viewModelScope,
         allDebrid = graph.allDebrid,
         allDebridKey = { graph.settings.allDebridKey.first() },
+        ready = graph.ready,
     )
 
     val wifi = graph.wifi
@@ -103,6 +107,17 @@ class DisneyViewModel(app: Application) : AndroidViewModel(app) {
     private val _debridOpen = MutableStateFlow(false)
     val debridOpen: StateFlow<Boolean> = _debridOpen.asStateFlow()
 
+    /** The "Supercharging your streams" screen after signing in; null when it isn't showing. */
+    sealed interface Supercharge {
+        data class Running(val done: Int, val total: Int, val ready: Int) : Supercharge
+        data class Done(val ready: Int, val total: Int) : Supercharge
+        data class Failed(val message: String) : Supercharge
+    }
+
+    private val _supercharge = MutableStateFlow<Supercharge?>(null)
+    val supercharge: StateFlow<Supercharge?> = _supercharge.asStateFlow()
+    private var superchargeJob: Job? = null
+
     init {
         wifi.startMonitoring()
         viewModelScope.launch { catalogue.value = graph.store.load() }
@@ -112,6 +127,8 @@ class DisneyViewModel(app: Application) : AndroidViewModel(app) {
             val key = graph.settings.allDebridKey.first()
             if (key.isNotBlank()) {
                 _debrid.value = Debrid.SignedIn(null)
+                // Quietly, now and then: AllDebrid's cache changes.
+                if (System.currentTimeMillis() - graph.ready.superchargedAt() > SUPERCHARGE_EVERY_MS) supercharge(key, show = false)
                 loadAccount(key)
             }
         }
@@ -170,6 +187,7 @@ class DisneyViewModel(app: Application) : AndroidViewModel(app) {
                 }
                 graph.settings.saveAllDebridKey(key)
                 _debrid.value = Debrid.SignedIn(null)
+                supercharge(key, show = true)
                 loadAccount(key)
             } catch (e: IOException) {
                 _debrid.value = Debrid.Failed(e.message ?: "Couldn't reach AllDebrid.")
@@ -186,8 +204,48 @@ class DisneyViewModel(app: Application) : AndroidViewModel(app) {
 
     fun signOutDebrid() {
         cancelDebridSignIn()
+        superchargeJob?.cancel()
+        _supercharge.value = null
         _debrid.value = Debrid.SignedOut
-        viewModelScope.launch { graph.settings.saveAllDebridKey("") }
+        viewModelScope.launch {
+            graph.settings.saveAllDebridKey("")
+            graph.ready.clear()
+        }
+    }
+
+    /**
+     * Asks AllDebrid which of the wall's first films it has (see Supercharger),
+     * on the "Supercharging your streams" screen when [show].
+     */
+    private fun supercharge(key: String, show: Boolean) {
+        superchargeJob?.cancel()
+        superchargeJob = viewModelScope.launch {
+            val films = catalogue.filterNotNull().first().playable.take(SUPERCHARGE_FILMS)
+            if (films.isEmpty()) return@launch
+            if (show) _supercharge.value = Supercharge.Running(0, films.size, 0)
+            try {
+                val result = graph.supercharger.run(key, films) { p ->
+                    _supercharge.update { s -> if (s is Supercharge.Running) Supercharge.Running(p.done, p.total, p.ready) else s }
+                }
+                if (_supercharge.value == null) return@launch
+                _supercharge.value = Supercharge.Done(result.ready, result.total)
+                delay(DONE_SHOWN_MS)
+                finishSupercharge()
+            } catch (e: IOException) {
+                if (_supercharge.value != null) {
+                    _supercharge.value = Supercharge.Failed(
+                        (e as? AllDebridException)?.message?.let { "AllDebrid: $it" } ?: "Couldn't reach AllDebrid. Films will still play.",
+                    )
+                }
+            }
+        }
+    }
+
+    /** Off the supercharge screen (it carries on quietly if it isn't done) and on to the wall. */
+    fun finishSupercharge() {
+        _supercharge.value = null
+        if (_debridOffer.value == true) finishDebridOffer()
+        if (_debridOpen.value) closeDebrid()
     }
 
     private suspend fun loadAccount(key: String) {
@@ -290,5 +348,12 @@ class DisneyViewModel(app: Application) : AndroidViewModel(app) {
     override fun onCleared() {
         playback.stop()
         wifi.stopMonitoring()
+    }
+
+    private companion object {
+        /** The wall's first rows: the films most likely to be picked. */
+        const val SUPERCHARGE_FILMS = 30
+        const val SUPERCHARGE_EVERY_MS = 12 * 60 * 60 * 1000L
+        const val DONE_SHOWN_MS = 1_800L
     }
 }

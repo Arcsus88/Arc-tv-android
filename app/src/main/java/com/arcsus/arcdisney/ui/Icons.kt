@@ -32,6 +32,12 @@ object AppIcons {
             "s-8,-3.58 -8,-8 3.58,-8 8,-8z",
     )
 
+    val Bolt: ImageVector = icon(
+        "Bolt",
+        "M11,21h-1l1,-7H7.5c-0.88,0 -0.33,-0.75 -0.31,-0.78C8.48,10.94 10.42,7.54 13.01,3h1l-1,7h3.51" +
+            "c0.4,0 0.62,0.19 0.4,0.66C12.97,17.55 11,21 11,21z",
+    )
+
     private fun icon(name: String, path: String): ImageVector =
         ImageVector.Builder(name, 24.dp, 24.dp, 24f, 24f)
             .addPath(pathData = addPathNodes(path), fill = SolidColor(Color.Black))

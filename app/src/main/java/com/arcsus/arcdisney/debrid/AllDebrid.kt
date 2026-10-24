@@ -121,6 +121,18 @@ class AllDebrid(
         DebridStream(link, unlocked.str("filename") ?: best.first)
     }
 
+    /**
+     * Whether AllDebrid already has the release, asked by adding it and
+     * removing it again straight after, so the account isn't left with it.
+     */
+    suspend fun isCached(key: String, magnet: String): Boolean = withContext(Dispatchers.IO) {
+        val upload = dataOf(post(url("/magnet/upload"), key, FormBody.Builder().add("magnets[]", magnet).build()))
+        val m = upload.arr("magnets")?.firstOrNull() as? JsonObject ?: return@withContext false
+        val id = m.str("id") ?: return@withContext false // a release AllDebrid won't take isn't one it has
+        delete(key, id)
+        m.bool("ready") == true
+    }
+
     private fun delete(key: String, id: String) {
         runCatching { get(url("/magnet/delete", "id" to id), key) }
     }

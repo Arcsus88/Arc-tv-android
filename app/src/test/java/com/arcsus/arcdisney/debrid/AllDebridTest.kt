@@ -8,6 +8,7 @@ import okhttp3.mockwebserver.MockWebServer
 import okhttp3.mockwebserver.RecordedRequest
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -107,5 +108,14 @@ class AllDebridTest {
         assertEquals("AUTH_BLOCKED", error.code)
         assertEquals("Confirm this new location in the email we sent you.", error.message)
         assertTrue(error !is NotCachedException)
+    }
+
+    @Test
+    fun checksTheCacheWithoutLeavingTheReleaseBehind() = runTest {
+        assertTrue(ad.isCached("KEY", "magnet:?xt=urn:btih:abc"))
+        cached = false
+        assertFalse(ad.isCached("KEY", "magnet:?xt=urn:btih:def"))
+        val paths = calls.map { it.requestUrl!!.encodedPath }
+        assertEquals(listOf("/v4/magnet/upload", "/v4/magnet/delete", "/v4/magnet/upload", "/v4/magnet/delete"), paths)
     }
 }

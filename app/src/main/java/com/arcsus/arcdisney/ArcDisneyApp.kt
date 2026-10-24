@@ -5,6 +5,8 @@ import android.content.Context
 import com.arcsus.arcdisney.data.CatalogueStore
 import com.arcsus.arcdisney.data.Settings
 import com.arcsus.arcdisney.debrid.AllDebrid
+import com.arcsus.arcdisney.debrid.ReadyFilms
+import com.arcsus.arcdisney.debrid.Supercharger
 import com.arcsus.arcdisney.torrent.TorrentEngine
 import com.arcsus.arcdisney.update.AutoUpdater
 import com.arcsus.arcdisney.update.ReleaseClient
@@ -39,6 +41,11 @@ class AppGraph(context: Context) {
 
     /** Faster streaming for devices signed in to their own AllDebrid account. */
     val allDebrid = AllDebrid(http)
+
+    /** Which release of each film AllDebrid has, so Play needn't ask first. */
+    val ready = ReadyFilms(File(context.filesDir, "alldebrid-ready.json"))
+
+    val supercharger = Supercharger(allDebrid, ready)
 
     /** Hourly checks for a newer GitHub release; builds without a token don't check. */
     val updates = AutoUpdater(
