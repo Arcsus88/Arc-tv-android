@@ -3,6 +3,7 @@ package com.arcsus.arcdisney.playback
 import com.arcsus.arcdisney.data.Film
 import com.arcsus.arcdisney.data.Release
 import com.arcsus.arcdisney.debrid.AllDebrid
+import com.arcsus.arcdisney.debrid.DebridStream
 import com.arcsus.arcdisney.debrid.ReadyFilms
 import com.arcsus.arcdisney.playback.PlaybackController.Phase
 import com.arcsus.arcdisney.playback.PlaybackController.Source
@@ -119,6 +120,35 @@ class PlaybackControllerTest {
         val ui = c.await { it.phase is Phase.Playing }
         assertEquals(Source.ALLDEBRID, ui.source)
         assertEquals(1, uploads.get()) // straight to it: the first release wasn't asked about
+        c.stop()
+    }
+
+    @Test
+    fun aSuperchargedFilmPlaysItsLinkWithoutAskingAllDebrid() {
+        runBlocking { ready.put(1, "b".repeat(40), DebridStream("https://cdn.example/ready.mkv", "Coco.mkv", 1)) }
+        val c = controller("KEY")
+        c.play(film)
+        val ui = c.await { it.phase is Phase.Playing }
+        assertEquals("https://cdn.example/ready.mkv", (ui.phase as Phase.Playing).url)
+        assertTrue(ui.prefetched)
+        assertEquals("Coco.2017.720p.BluRay", ui.release.name)
+        assertEquals(0, uploads.get())
+        c.stop()
+    }
+
+    @Test
+    fun aSuperchargedLinkThatWontPlayIsFetchedAgain() {
+        cachedHash = "b".repeat(40)
+        runBlocking { ready.put(1, "b".repeat(40), DebridStream("https://cdn.example/stale.mkv", "Coco.mkv", 1)) }
+        val c = controller("KEY")
+        c.play(film)
+        c.await { it.prefetched }
+        c.tryAnother("VLC couldn't play this release.") // as the player reports it
+        val ui = c.await { it.phase is Phase.Playing && !it.prefetched }
+        assertEquals("https://cdn.example/Coco.mkv", (ui.phase as Phase.Playing).url)
+        assertEquals(Source.ALLDEBRID, ui.source)
+        assertEquals(1, uploads.get()) // straight to the release it has
+        assertEquals("https://cdn.example/Coco.mkv", runBlocking { ready.get(1) }!!.stream!!.url) // kept for next time
         c.stop()
     }
 

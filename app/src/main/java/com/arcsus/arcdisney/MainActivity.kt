@@ -35,6 +35,7 @@ class MainActivity : ComponentActivity() {
     override fun onStart() {
         super.onStart()
         (application as ArcDisneyApp).graph.warmUp()
+        vm.onScreen()
     }
 
     override fun onResume() {

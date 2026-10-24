@@ -111,11 +111,15 @@ class AllDebridTest {
     }
 
     @Test
-    fun checksTheCacheWithoutLeavingTheReleaseBehind() = runTest {
-        assertTrue(ad.isCached("KEY", "magnet:?xt=urn:btih:abc"))
+    fun keepsAReleaseAllDebridHasAndRemovesOneItHasnt() = runTest {
+        assertEquals("42", ad.cachedId("KEY", "magnet:?xt=urn:btih:abc"))
         cached = false
-        assertFalse(ad.isCached("KEY", "magnet:?xt=urn:btih:def"))
+        assertNull(ad.cachedId("KEY", "magnet:?xt=urn:btih:def"))
         val paths = calls.map { it.requestUrl!!.encodedPath }
-        assertEquals(listOf("/v4/magnet/upload", "/v4/magnet/delete", "/v4/magnet/upload", "/v4/magnet/delete"), paths)
+        assertEquals(listOf("/v4/magnet/upload", "/v4/magnet/upload", "/v4/magnet/delete"), paths)
+
+        val stream = ad.streamOf("KEY", "42")
+        assertEquals("https://cdn.alldebrid.com/dl/Coco.2017.1080p.mkv", stream.url)
+        assertEquals(1_900_000_000L, stream.size)
     }
 }

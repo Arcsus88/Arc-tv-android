@@ -78,15 +78,22 @@ AllDebrid's link, the torrent takes over too. The requests come from the
 device itself, as AllDebrid only serves links to the IP that asked for them.
 
 **Supercharging your streams** (`debrid/Supercharger.kt`): straight after
-signing in, a screen with a progress bar checks the wall's first 30 films on
-AllDebrid (each release asked about is removed from the account again) and
-remembers which release it has for each (`debrid/ReadyFilms.kt`). So the
-wait happens there, once, rather than on the launch screen: Play then goes
-straight to the release AllDebrid has, or straight to the torrent for a
-film it has none of. Every play remembers what it found too. The check is
-redone quietly when the app starts if it's more than 12 hours old, and
-anything older than that is asked about afresh. Skip carries on with it in
-the background.
+signing in, and whenever the app comes on screen with its links over three
+hours old, a screen with a progress bar gets the wall's first 30 films ready
+to play from AllDebrid, so the waiting happens there, once, rather than on
+the launch screen. For each film it finds the first release AllDebrid has
+(ones it hasn't are removed from the account again), unlocks that release's
+file for this device, and fetches the first and last 256 KB of it, which
+checks the link plays from here and gets AllDebrid's servers sending it.
+Then VLC opens one of the links with no picture or sound until it starts, so
+its first HTTPS stream (TLS, demuxers) is done too. Play then hands a
+supercharged film's link straight to VLC, with no AllDebrid requests and a
+1.5-second buffer instead of 4. A link that won't play (gone stale, or the
+device's IP has changed) is fetched afresh before the torrent is tried, and
+a film AllDebrid has none of goes straight to the torrent. Every play keeps
+what it found as well (`debrid/ReadyFilms.kt`). Skip carries on in the
+background. The films AllDebrid has stay in the account, as their links need
+them.
 
 **Playing a film by torrent** (`torrent/`):
 
@@ -207,13 +214,15 @@ from a published release. They don't check for updates either: that needs
   old entry, and networks it refuses.
 - `debrid/`: the AllDebrid PIN sign-in, account details, a cached release
   resolving to its largest file, an uncached one removed again, and account
-  errors keeping AllDebrid's reason; supercharging (stopping at the first
-  release AllDebrid has, nothing left in the account, an account problem
-  stopping it) and how long what it found is trusted.
+  errors keeping AllDebrid's reason; supercharging (the first release
+  AllDebrid has, unlocked and its start and end fetched; ones it hasn't
+  removed; a link that won't play not kept; an account problem stopping it)
+  and how long checks and links are trusted.
 - `playback/`: the order a film comes in: a release AllDebrid has plays from
   it without libtorrent starting; none cached, signed out, or a bad key fall
-  back to the torrent (with the reason shown); a supercharged film goes
-  straight to its release, or straight to the torrent.
+  back to the torrent (with the reason shown); a supercharged film plays its
+  link with no AllDebrid requests, gets a fresh one if that won't play, or
+  goes straight to the torrent.
 - `update/`: picking the newest release and this CPU's APK, reading releases
   with the token, and downloading through GitHub's redirect without the token
   following it.

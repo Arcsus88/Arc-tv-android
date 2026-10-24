@@ -16,6 +16,7 @@ import com.arcsus.arcdisney.data.searchWords
 import com.arcsus.arcdisney.debrid.AllDebridAccount
 import com.arcsus.arcdisney.debrid.AllDebridException
 import com.arcsus.arcdisney.debrid.AllDebridPin
+import com.arcsus.arcdisney.debrid.ReadyFilms
 import com.arcsus.arcdisney.playback.PlaybackController
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -127,8 +128,6 @@ class DisneyViewModel(app: Application) : AndroidViewModel(app) {
             val key = graph.settings.allDebridKey.first()
             if (key.isNotBlank()) {
                 _debrid.value = Debrid.SignedIn(null)
-                // Quietly, now and then: AllDebrid's cache changes.
-                if (System.currentTimeMillis() - graph.ready.superchargedAt() > SUPERCHARGE_EVERY_MS) supercharge(key, show = false)
                 loadAccount(key)
             }
         }
@@ -187,7 +186,7 @@ class DisneyViewModel(app: Application) : AndroidViewModel(app) {
                 }
                 graph.settings.saveAllDebridKey(key)
                 _debrid.value = Debrid.SignedIn(null)
-                supercharge(key, show = true)
+                supercharge(key)
                 loadAccount(key)
             } catch (e: IOException) {
                 _debrid.value = Debrid.Failed(e.message ?: "Couldn't reach AllDebrid.")
@@ -214,19 +213,44 @@ class DisneyViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /**
-     * Asks AllDebrid which of the wall's first films it has (see Supercharger),
-     * on the "Supercharging your streams" screen when [show].
+     * The app came on screen. Signed in to AllDebrid, its films are got ready
+     * again (on the supercharge screen) once their links have gone stale;
+     * otherwise VLC is warmed up with one that's still good.
      */
-    private fun supercharge(key: String, show: Boolean) {
+    fun onScreen() {
+        viewModelScope.launch {
+            val key = graph.settings.allDebridKey.first()
+            if (key.isBlank() || superchargeJob?.isActive == true) return@launch
+            if (System.currentTimeMillis() - graph.ready.superchargedAt() > ReadyFilms.LINK_FRESH_MS) {
+                supercharge(key)
+            } else {
+                preroll()
+            }
+        }
+    }
+
+    private suspend fun superchargeFilms() = catalogue.filterNotNull().first().playable.take(SUPERCHARGE_FILMS)
+
+    /** VLC's first stream over HTTPS, done now with a ready film, so the first one picked starts at once. */
+    private suspend fun preroll() {
+        graph.ready.anyStream(superchargeFilms().map { it.id })?.let { graph.prerollVlc(it.url) }
+    }
+
+    /**
+     * Gets the wall's first films ready to play from AllDebrid (see
+     * Supercharger), on the "Supercharging your streams" screen.
+     */
+    private fun supercharge(key: String) {
         superchargeJob?.cancel()
         superchargeJob = viewModelScope.launch {
-            val films = catalogue.filterNotNull().first().playable.take(SUPERCHARGE_FILMS)
+            val films = superchargeFilms()
             if (films.isEmpty()) return@launch
-            if (show) _supercharge.value = Supercharge.Running(0, films.size, 0)
+            _supercharge.value = Supercharge.Running(0, films.size, 0)
             try {
                 val result = graph.supercharger.run(key, films) { p ->
                     _supercharge.update { s -> if (s is Supercharge.Running) Supercharge.Running(p.done, p.total, p.ready) else s }
                 }
+                preroll()
                 if (_supercharge.value == null) return@launch
                 _supercharge.value = Supercharge.Done(result.ready, result.total)
                 delay(DONE_SHOWN_MS)
@@ -353,7 +377,6 @@ class DisneyViewModel(app: Application) : AndroidViewModel(app) {
     private companion object {
         /** The wall's first rows: the films most likely to be picked. */
         const val SUPERCHARGE_FILMS = 30
-        const val SUPERCHARGE_EVERY_MS = 12 * 60 * 60 * 1000L
         const val DONE_SHOWN_MS = 1_800L
     }
 }

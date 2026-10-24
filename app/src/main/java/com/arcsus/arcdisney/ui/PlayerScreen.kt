@@ -125,7 +125,9 @@ fun PlayerScreen(
         }
         val media = Media(libVlc, Uri.parse(url)).apply {
             setHWDecoderEnabled(true, false)
-            addOption(":network-caching=4000")
+            // AllDebrid sends at full speed, so a shorter buffer starts the film sooner; the
+            // torrent's address only has what the swarm has delivered, so it gets more slack.
+            addOption(":network-caching=${if (fromAllDebrid) 1500 else 4000}")
         }
         player.media = media
         media.release()

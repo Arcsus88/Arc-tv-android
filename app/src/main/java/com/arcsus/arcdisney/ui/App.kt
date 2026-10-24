@@ -125,7 +125,8 @@ fun App(vm: DisneyViewModel) {
         // After signing in to AllDebrid, over whichever AllDebrid screen it was.
         var lastSupercharge by remember { mutableStateOf<DisneyViewModel.Supercharge?>(null) }
         supercharge?.let { lastSupercharge = it }
-        AnimatedVisibility(visible = supercharge != null, enter = fadeIn(tween(400)), exit = fadeOut(tween(500))) {
+        val superchargeShown = supercharge != null && stage != Stage.SPLASH && stage != Stage.SETUP
+        AnimatedVisibility(visible = superchargeShown, enter = fadeIn(tween(400)), exit = fadeOut(tween(500))) {
             lastSupercharge?.let { SuperchargeScreen(it, onSkip = vm::finishSupercharge, onContinue = vm::finishSupercharge) }
         }
 

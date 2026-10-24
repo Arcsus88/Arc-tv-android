@@ -2,6 +2,9 @@ package com.arcsus.arcdisney
 
 import android.app.Application
 import android.content.Context
+import android.net.Uri
+import android.os.Handler
+import android.os.Looper
 import com.arcsus.arcdisney.data.CatalogueStore
 import com.arcsus.arcdisney.data.Settings
 import com.arcsus.arcdisney.debrid.AllDebrid
@@ -13,6 +16,8 @@ import com.arcsus.arcdisney.update.ReleaseClient
 import com.arcsus.arcdisney.wifi.WifiController
 import okhttp3.OkHttpClient
 import org.videolan.libvlc.LibVLC
+import org.videolan.libvlc.Media
+import org.videolan.libvlc.MediaPlayer
 import java.io.File
 import java.util.concurrent.TimeUnit
 import kotlin.concurrent.thread
@@ -45,7 +50,7 @@ class AppGraph(context: Context) {
     /** Which release of each film AllDebrid has, so Play needn't ask first. */
     val ready = ReadyFilms(File(context.filesDir, "alldebrid-ready.json"))
 
-    val supercharger = Supercharger(allDebrid, ready)
+    val supercharger = Supercharger(allDebrid, ready, http)
 
     /** Hourly checks for a newer GitHub release; builds without a token don't check. */
     val updates = AutoUpdater(
@@ -75,4 +80,51 @@ class AppGraph(context: Context) {
 
     /** Off screen: libtorrent may stop once no film is open. */
     fun coolDown() = engine.setForeground(false)
+
+    private val main = Handler(Looper.getMainLooper())
+
+    /**
+     * Opens [url] in VLC with no picture or sound until it starts, then stops:
+     * VLC's first stream over HTTPS sets up its TLS and its demuxers, which
+     * the first film would otherwise wait for. VLC is loaded off the main
+     * thread, then driven on it, the way the player screen drives it.
+     */
+    fun prerollVlc(url: String) {
+        thread(name = "vlc-preroll") {
+            if (runCatching { vlc }.isSuccess) main.post { preroll(url) }
+        }
+    }
+
+    private fun preroll(url: String) {
+        runCatching {
+            val player = MediaPlayer(vlc)
+            val media = Media(vlc, Uri.parse(url)).apply {
+                addOption(":no-video")
+                addOption(":no-audio")
+                addOption(":network-caching=1000")
+            }
+            player.media = media
+            media.release()
+            var stopped = false
+            val stop = Runnable {
+                if (!stopped) {
+                    stopped = true
+                    runCatching {
+                        player.setEventListener(null)
+                        player.stop()
+                        player.release()
+                    }
+                }
+            }
+            player.setEventListener { e ->
+                if (e.type == MediaPlayer.Event.Playing || e.type == MediaPlayer.Event.EncounteredError) main.post(stop)
+            }
+            player.play()
+            main.postDelayed(stop, PREROLL_MAX_MS)
+        }
+    }
+
+    private companion object {
+        const val PREROLL_MAX_MS = 10_000L
+    }
 }

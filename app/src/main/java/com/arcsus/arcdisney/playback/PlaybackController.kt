@@ -63,6 +63,8 @@ class PlaybackController(
         val stats: StreamStats = StreamStats(),
         /** Why an earlier release (or AllDebrid) was passed over, for the launch screen. */
         val note: String? = null,
+        /** Playing a link got ready by supercharging, without asking AllDebrid. */
+        val prefetched: Boolean = false,
     ) {
         val canTryAnother: Boolean get() = source == Source.TORRENT && attempt < candidates
     }
@@ -78,6 +80,15 @@ class PlaybackController(
 
     fun play(film: Film) {
         stop()
+        begin(film, linkFailed = false)
+    }
+
+    /**
+     * A supercharged link plays at once; otherwise AllDebrid is asked, then
+     * the torrent. After [linkFailed] (the supercharged link wouldn't play),
+     * that link is dropped and AllDebrid is asked afresh.
+     */
+    private fun begin(film: Film, linkFailed: Boolean) {
         candidates = film.releases.filter { it.seeds > 0 }.take(MAX_TRIES)
         // AllDebrid's cache doesn't care whether anyone is still seeding.
         val cachedCandidates = film.releases.take(MAX_DEBRID_TRIES)
@@ -85,9 +96,17 @@ class PlaybackController(
         index = 0
         lookup = scope.launch {
             val key = allDebridKey()
-            val known = ready?.get(film.id)
+            val signedIn = allDebrid != null && key.isNotBlank() && cachedCandidates.isNotEmpty()
+            if (linkFailed) ready?.dropLink(film.id)
+            val known = if (signedIn) ready?.get(film.id) else null
+            val link = known?.stream
+            if (link != null) {
+                val release = film.releases.firstOrNull { it.hash == known.hash } ?: cachedCandidates.first()
+                _ui.value = Ui(film, release, 1, 1, Phase.Playing(link.url, link.fileName), Source.ALLDEBRID, prefetched = true)
+                return@launch
+            }
             val note = when {
-                allDebrid == null || key.isBlank() || cachedCandidates.isEmpty() -> null
+                allDebrid == null || !signedIn -> null
                 // Checked lately and AllDebrid had none of them: no need to ask again.
                 known != null && known.hash == null -> NOT_ON_ALLDEBRID
                 // The one it has goes first.
@@ -111,7 +130,7 @@ class PlaybackController(
             _ui.update { it?.copy(release = release, attempt = i + 1) }
             try {
                 val s = ad.resolve(key, release.magnet)
-                ready?.put(film.id, release.hash)
+                ready?.put(film.id, release.hash, s)
                 _ui.update { it?.copy(phase = Phase.Playing(s.url, s.fileName)) }
                 return null
             } catch (e: NotCachedException) {
@@ -129,6 +148,12 @@ class PlaybackController(
     /** The launch screen's "Try another release", or VLC failing to open the file. */
     fun tryAnother(reason: String? = null) {
         val ui = _ui.value ?: return
+        if (ui.source == Source.ALLDEBRID && ui.prefetched) {
+            // A supercharged link that's gone stale (or this device's IP changed): get a fresh one.
+            job?.cancel()
+            begin(ui.film, linkFailed = true)
+            return
+        }
         if (ui.source == Source.ALLDEBRID) {
             // AllDebrid's link wouldn't play: fall back to the torrent.
             if (candidates.isEmpty()) {

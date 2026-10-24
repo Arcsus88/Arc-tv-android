@@ -18,7 +18,15 @@ import okhttp3.Request
 import java.io.IOException
 
 /** AllDebrid said no, with its reason (bad key, needs confirming by email, not premium…). */
-open class AllDebridException(message: String, val code: String? = null) : IOException(message)
+open class AllDebridException(message: String, val code: String? = null) : IOException(message) {
+    /** The account (key, premium, location) rather than one film's release or link. */
+    val isAccountProblem: Boolean
+        get() = code != null && ACCOUNT_CODES.any { code.startsWith(it) }
+
+    private companion object {
+        val ACCOUNT_CODES = listOf("AUTH_", "MUST_BE_PREMIUM", "USER_", "FREE_TRIAL", "NO_SERVER")
+    }
+}
 
 /** The release isn't in AllDebrid's cache, so it can't stream from there right now. */
 class NotCachedException : AllDebridException("Not ready on AllDebrid.")
@@ -28,7 +36,8 @@ data class AllDebridPin(val pin: String, val check: String, val url: String, val
 
 data class AllDebridAccount(val username: String, val premium: Boolean, val premiumUntil: Long)
 
-data class DebridStream(val url: String, val fileName: String)
+/** A film's file as a link VLC can play straight away (only from the IP that asked for it). */
+data class DebridStream(val url: String, val fileName: String, val size: Long = 0)
 
 /**
  * AllDebrid API v4, called from the device itself: AllDebrid refuses magnet
@@ -89,16 +98,34 @@ class AllDebrid(
      * has it. A release it doesn't have is removed from the account again.
      */
     suspend fun resolve(key: String, magnet: String): DebridStream = withContext(Dispatchers.IO) {
-        val upload = dataOf(post(url("/magnet/upload"), key, FormBody.Builder().add("magnets[]", magnet).build()))
-        val m = upload.arr("magnets")?.firstOrNull() as? JsonObject
-            ?: throw AllDebridException("AllDebrid didn't take the release.")
-        (m["error"] as? JsonObject)?.let { throw AllDebridException(clean(it.str("message")) ?: "AllDebrid refused the release.", it.str("code")) }
-        val id = m.str("id") ?: throw AllDebridException("AllDebrid sent no id for the release.")
-        if (m.bool("ready") != true) {
+        val (id, ready) = upload(key, magnet)
+        if (!ready) {
             delete(key, id)
             throw NotCachedException()
         }
+        streamOf(key, id)
+    }
 
+    /**
+     * The id of the release in the account if AllDebrid already has it (it's
+     * kept, for [streamOf]); one it doesn't have is removed again and gives null.
+     */
+    suspend fun cachedId(key: String, magnet: String): String? = withContext(Dispatchers.IO) {
+        val (id, ready) = try {
+            upload(key, magnet)
+        } catch (e: NotCachedException) {
+            return@withContext null
+        }
+        if (ready) {
+            id
+        } else {
+            delete(key, id)
+            null
+        }
+    }
+
+    /** The largest file of a release AllDebrid has, unlocked for this device. */
+    suspend fun streamOf(key: String, id: String): DebridStream = withContext(Dispatchers.IO) {
         val files = mutableListOf<Triple<String, Long, String>>() // name, size, link
         fun walk(entries: JsonArray?) {
             for (e in entries ?: return) {
@@ -118,19 +145,21 @@ class AllDebrid(
             delete(key, id)
             throw AllDebridException("AllDebrid couldn't unlock the film.")
         }
-        DebridStream(link, unlocked.str("filename") ?: best.first)
+        DebridStream(link, unlocked.str("filename") ?: best.first, unlocked.long("filesize") ?: best.second)
     }
 
-    /**
-     * Whether AllDebrid already has the release, asked by adding it and
-     * removing it again straight after, so the account isn't left with it.
-     */
-    suspend fun isCached(key: String, magnet: String): Boolean = withContext(Dispatchers.IO) {
+    /** Adds the release to the account: its id there, and whether AllDebrid already has it. */
+    private fun upload(key: String, magnet: String): Pair<String, Boolean> {
         val upload = dataOf(post(url("/magnet/upload"), key, FormBody.Builder().add("magnets[]", magnet).build()))
-        val m = upload.arr("magnets")?.firstOrNull() as? JsonObject ?: return@withContext false
-        val id = m.str("id") ?: return@withContext false // a release AllDebrid won't take isn't one it has
-        delete(key, id)
-        m.bool("ready") == true
+        val m = upload.arr("magnets")?.firstOrNull() as? JsonObject
+            ?: throw AllDebridException("AllDebrid didn't take the release.")
+        (m["error"] as? JsonObject)?.let {
+            // One release it won't take (a bad magnet) is just one it doesn't have.
+            if (it.str("code")?.startsWith("MAGNET_") == true) throw NotCachedException()
+            throw AllDebridException(clean(it.str("message")) ?: "AllDebrid refused the release.", it.str("code"))
+        }
+        val id = m.str("id") ?: throw AllDebridException("AllDebrid sent no id for the release.")
+        return id to (m.bool("ready") == true)
     }
 
     private fun delete(key: String, id: String) {
