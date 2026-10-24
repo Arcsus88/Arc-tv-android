@@ -93,7 +93,12 @@ device itself, as AllDebrid only serves links to the IP that asked for them.
   the next one is tried (up to 4), with no extra tap. "Try another release" on
   the launch screen does the same by hand.
 - The film downloads to the app's cache and is deleted when you leave it.
-  libtorrent stops a minute after the last film closes.
+- libtorrent starts as soon as the app is on screen, not when a film is
+  picked, and stays up while the app is open: a cold session has to find its
+  DHT nodes first, which made the first film of a session slow to start. The
+  nodes are also kept between runs (`torrent-session` in the app's files), so
+  even a fresh start finds peers quickly. Off screen, libtorrent stops a
+  minute after the last film closes.
 
 libtorrent's default storage memory-maps files and installs its own
 SIGSEGV/SIGBUS handler; the engine uses its plain read/write storage instead,
@@ -102,7 +107,8 @@ which is plenty for one film at a time.
 **The player** is libVLC inside the app: full screen and landscape, with
 play/pause, ±10 s, a seek bar, fit/fill, and the release's audio and subtitle
 tracks. VLC decodes everything a release might carry (HEVC, TrueHD, DTS).
-Leaving the app pauses the film.
+VLC is loaded once, as the app starts, and shared by every film. Leaving the
+app pauses the film.
 
 **Worth knowing:** streaming a torrent means the phone downloads from, and
 uploads to, everyone sharing it, and they can see its IP address. In the UK
@@ -177,7 +183,9 @@ from a published release. They don't check for updates either: that needs
   blocked site, Knaben filling in and standing in), and the catalogue store's
   snapshot merging.
 - `torrent/`: the HTTP server's range handling; the real engine streaming a
-  magnet from a libtorrent seeder on loopback, byte for byte with a seek; and,
+  magnet from a libtorrent seeder on loopback, byte for byte with a seek;
+  starting as the app comes on screen, staying up while it is, and keeping
+  its state for the next start; and,
   where ffmpeg is installed, a real H.264/AAC MP4 streamed by torrent and
   decoded by ffmpeg over the app's address, seeking past what has downloaded.
   ffmpeg's HTTP input reads by range requests the way VLC's does. These run
@@ -198,6 +206,10 @@ from a published release. They don't check for updates either: that needs
 - `admin/KioskTest`: kiosk mode as device owner on Robolectric's Android 9 (lock
   task, home screen, location granted), an ordinary install left alone, and an
   update that downloads during a film but installs only once it ends.
+- `ui/UpdateMenuTest`, `ui/AppMenuTest`: the update button's long-press menu,
+  opened again and again: on the wall alone (a tap elsewhere or Back closes
+  it without playing a film), and in the whole app, through first-run setup
+  and each screen the menu opens.
 - `ui/ScreensTest`: the splash, wall, launch, player and Wi-Fi screens rendered on
   the JVM with Robolectric and Roborazzi, into `app/build/screens/` with
   `-Proborazzi.test.record=true`. Posters load from `-DposterDir=…` (TMDB

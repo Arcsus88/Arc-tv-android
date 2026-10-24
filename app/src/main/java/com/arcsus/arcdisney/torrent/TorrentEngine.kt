@@ -63,6 +63,11 @@ data class StreamStats(
 /**
  * libtorrent on the phone: one session for the app, one torrent at a time
  * in practice. Each film streams from [workDir] and is deleted when it closes.
+ *
+ * A cold session is slow to find anyone sharing a film: its DHT starts with
+ * no nodes. So the session starts as soon as the app is on screen
+ * ([setForeground]) and stays up while it is, and the DHT's nodes are kept
+ * in [Config.stateFile] for the next start.
  */
 class TorrentEngine(
     private val workDir: File,
@@ -77,14 +82,20 @@ class TorrentEngine(
         val metadataTimeoutMs: Long = 45_000,
         /** No new bytes for this long before VLC opens: the swarm is dead. */
         val stallTimeoutMs: Long = 60_000,
-        /** With no film open this long, libtorrent (DHT and all) stops until the next one. */
+        /** Off screen with no film open this long, libtorrent (DHT and all) stops until it's needed. */
         val idleStopMs: Long = 60_000,
+        /** Where the session's state (the DHT's nodes above all) is kept between runs; null keeps none. */
+        val stateFile: File? = null,
     )
 
     private val session = SessionManager(false)
     private val streams = ConcurrentHashMap<String, TorrentStream>()
     internal val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var idleStop: Job? = null
+    private var saver: Job? = null
+
+    @Volatile
+    private var foreground = false
 
     // Stopping deletes the native session; a call into a torrent at that moment
     // crashes the process. Torrent calls run under the read lock and skip while
@@ -106,6 +117,8 @@ class TorrentEngine(
     }
 
     private fun stopSession() {
+        saver?.cancel()
+        saveState()
         stopping = true
         gate.writeLock().lock()
         try {
@@ -156,7 +169,67 @@ class TorrentEngine(
         settings.setEnableLsd(config.lsd)
         settings.setBoolean(settings_pack.bool_types.enable_upnp.swigValue(), config.portMapping)
         settings.setBoolean(settings_pack.bool_types.enable_natpmp.swigValue(), config.portMapping)
-        session.start(posixSession(settings))
+        val params = savedState()?.apply {
+            setSettings(settings)
+            setPosixDiskIO()
+        } ?: posixSession(settings)
+        session.start(params)
+        // Kept now and then too, in case the app is killed rather than stopped.
+        saver = scope.launch {
+            delay(FIRST_SAVE_MS)
+            while (true) {
+                saveState()
+                delay(SAVE_EVERY_MS)
+            }
+        }
+    }
+
+    private fun savedState(): SessionParams? {
+        val file = config.stateFile?.takeIf { it.isFile } ?: return null
+        return runCatching { SessionParams(file.readBytes()) }.getOrNull()
+    }
+
+    private val saving = Any()
+
+    private fun saveState() {
+        val file = config.stateFile ?: return
+        synchronized(saving) {
+            val state = live { session.saveState() } ?: return
+            runCatching {
+                val tmp = File(file.path + ".tmp")
+                tmp.writeBytes(state)
+                if (!tmp.renameTo(file)) {
+                    file.delete()
+                    tmp.renameTo(file)
+                }
+            }
+        }
+    }
+
+    /**
+     * On screen, the session starts (if it hasn't) and stays up between films;
+     * off screen, it stops [Config.idleStopMs] after the last film closes.
+     */
+    fun setForeground(on: Boolean) {
+        foreground = on
+        scope.launch { if (on) startIfForeground() else scheduleIdleStop() }
+    }
+
+    @Synchronized
+    private fun startIfForeground() {
+        if (!foreground) return
+        idleStop?.cancel()
+        ensureStarted()
+    }
+
+    @Synchronized
+    private fun scheduleIdleStop() {
+        if (foreground || streams.isNotEmpty() || !session.isRunning) return
+        idleStop?.cancel()
+        idleStop = scope.launch {
+            delay(config.idleStopMs)
+            stopIfIdle()
+        }
     }
 
     /**
@@ -186,19 +259,15 @@ class TorrentEngine(
     internal fun remove(stream: TorrentStream) {
         streams.remove(stream.hash, stream)
         live { if (stream.handle.isValid) session.remove(stream.handle, session_handle.delete_files) }
-        if (streams.isEmpty()) {
-            idleStop?.cancel()
-            idleStop = scope.launch {
-                delay(config.idleStopMs)
-                stopIfIdle()
-            }
-        }
+        scheduleIdleStop()
     }
 
     @Synchronized
     private fun stopIfIdle() {
-        if (streams.isEmpty()) stopSession()
+        if (streams.isEmpty() && !foreground) stopSession()
     }
+
+    internal val running: Boolean get() = session.isRunning
 
     @Synchronized
     fun shutdown() {
@@ -223,6 +292,9 @@ class TorrentEngine(
          * to rely on that). Streaming one film doesn't need mmap's speed.
          */
         fun posixSession(settings: SettingsPack) = SessionParams(settings).apply { setPosixDiskIO() }
+
+        private const val FIRST_SAVE_MS = 2 * 60_000L
+        private const val SAVE_EVERY_MS = 10 * 60_000L
     }
     internal val metadataTimeoutMs get() = config.metadataTimeoutMs
 }

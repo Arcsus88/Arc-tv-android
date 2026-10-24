@@ -81,10 +81,12 @@ import java.util.Locale
 /**
  * VLC inside the app: the film plays from the torrent's local HTTP address,
  * full screen and landscape, with VLC's own decoders (every codec and audio
- * format a release might use).
+ * format a release might use). [libVlc] is the app's one VLC, loaded early
+ * and kept: a player of its own is made (and released) for each film.
  */
 @Composable
 fun PlayerScreen(
+    libVlc: LibVLC,
     url: String,
     title: String,
     stats: StreamStats,
@@ -97,9 +99,6 @@ fun PlayerScreen(
     val onErrorNow by rememberUpdatedState(onError)
     val onCloseNow by rememberUpdatedState(onClose)
 
-    val libVlc = remember {
-        LibVLC(context, arrayListOf("--network-caching=4000", "--http-reconnect", "--audio-time-stretch"))
-    }
     val player = remember { MediaPlayer(libVlc) }
 
     var playing by remember { mutableStateOf(false) }
@@ -136,7 +135,6 @@ fun PlayerScreen(
             player.stop()
             player.detachViews()
             player.release()
-            libVlc.release()
         }
     }
 

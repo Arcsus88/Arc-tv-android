@@ -70,6 +70,9 @@ class DisneyViewModel(app: Application) : AndroidViewModel(app) {
     val wifi = graph.wifi
     val wifiState = wifi.state
 
+    /** The app's one VLC (loading it is slow, so it's loaded once, at start). */
+    val vlc get() = graph.vlc
+
     /** Null until known: whether first-run setup (getting online) is still to do. */
     private val _setupNeeded = MutableStateFlow<Boolean?>(null)
     val setupNeeded: StateFlow<Boolean?> = _setupNeeded.asStateFlow()

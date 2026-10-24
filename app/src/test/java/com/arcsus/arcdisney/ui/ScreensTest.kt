@@ -10,10 +10,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.longClick
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.performTouchInput
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import coil.Coil
@@ -127,6 +130,29 @@ class ScreensTest {
             onTmdbKey = {},
             onPlay = {},
         )
+    }
+
+    @Test
+    fun wallSettingsMenu() {
+        compose.setContent {
+            ArcDisneyTheme {
+                PosterWall(
+                    films = films,
+                    query = "",
+                    onQuery = {},
+                    update = DisneyViewModel.Update.Idle,
+                    message = null,
+                    online = true,
+                    onUpdate = {},
+                    onOpenWifi = {},
+                    onAllDebrid = {},
+                    onTmdbKey = {},
+                    onPlay = {},
+                )
+            }
+        }
+        compose.onNodeWithContentDescription("Look for new films").performTouchInput { longClick() }
+        capture("19-wall-menu")
     }
 
     @Test

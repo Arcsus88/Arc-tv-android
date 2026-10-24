@@ -140,6 +140,7 @@ fun App(vm: DisneyViewModel) {
         val phase = ui?.phase
         if (ui != null && phase is Phase.Playing) {
             PlayerScreen(
+                libVlc = vm.vlc,
                 url = phase.url,
                 title = ui.film.title,
                 stats = ui.stats,

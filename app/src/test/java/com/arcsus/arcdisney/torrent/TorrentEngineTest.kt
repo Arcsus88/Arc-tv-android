@@ -1,5 +1,6 @@
 package com.arcsus.arcdisney.torrent
 
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
@@ -74,6 +75,33 @@ class TorrentEngineTest {
         assertArrayEquals(film, all)
 
         stream.close()
+    }
+
+    @Test
+    fun onScreenItStartsAtOnceAndKeepsItsStateForNextTime() = runBlocking {
+        val state = File(root, "torrent-session")
+        val config = TorrentEngine.Config(
+            listenInterfaces = "127.0.0.1:${LoopbackSeeder.freePort()}",
+            dht = false,
+            lsd = false,
+            portMapping = false,
+            idleStopMs = 300,
+            stateFile = state,
+        )
+        val warm = TorrentEngine(File(root, "warm"), config)
+        try {
+            warm.setForeground(true)
+            withTimeout(10_000) { while (!warm.running) delay(50) }
+            delay(1_000)
+            assertTrue(warm.running) // on screen with no film: stays up
+            warm.setForeground(false)
+            withTimeout(10_000) { while (warm.running) delay(50) }
+            assertTrue(state.length() > 0) // kept on the way down
+            warm.setForeground(true) // and started again from it
+            withTimeout(10_000) { while (!warm.running) delay(50) }
+        } finally {
+            warm.shutdown()
+        }
     }
 
     @Test

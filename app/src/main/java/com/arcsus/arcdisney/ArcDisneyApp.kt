@@ -10,8 +10,10 @@ import com.arcsus.arcdisney.update.AutoUpdater
 import com.arcsus.arcdisney.update.ReleaseClient
 import com.arcsus.arcdisney.wifi.WifiController
 import okhttp3.OkHttpClient
+import org.videolan.libvlc.LibVLC
 import java.io.File
 import java.util.concurrent.TimeUnit
+import kotlin.concurrent.thread
 
 class ArcDisneyApp : Application() {
     val graph: AppGraph by lazy { AppGraph(this) }
@@ -45,6 +47,25 @@ class AppGraph(context: Context) {
         currentVersion = BuildConfig.VERSION_NAME,
     )
 
-    /** Films download to the cache while they play and are deleted after. */
-    val engine: TorrentEngine by lazy { TorrentEngine(File(context.cacheDir, "torrents")) }
+    /** Films download to the cache while they play and are deleted after; the DHT's nodes are kept. */
+    val engine: TorrentEngine by lazy {
+        TorrentEngine(File(context.cacheDir, "torrents"), TorrentEngine.Config(stateFile = File(context.filesDir, "torrent-session")))
+    }
+
+    /** The player's VLC, shared by every film: loading it is slow, so it happens once. */
+    val vlc: LibVLC by lazy {
+        LibVLC(context, arrayListOf("--network-caching=4000", "--http-reconnect", "--audio-time-stretch"))
+    }
+
+    /**
+     * The app is on screen: start libtorrent (its DHT takes a while to find
+     * peers) and load VLC now, rather than when the first film is picked.
+     */
+    fun warmUp() {
+        engine.setForeground(true)
+        thread(name = "vlc-warm-up") { runCatching { vlc } }
+    }
+
+    /** Off screen: libtorrent may stop once no film is open. */
+    fun coolDown() = engine.setForeground(false)
 }

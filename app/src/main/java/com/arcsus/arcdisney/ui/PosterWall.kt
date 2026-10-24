@@ -1,5 +1,6 @@
 package com.arcsus.arcdisney.ui
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
@@ -10,6 +11,7 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -18,10 +20,12 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -51,8 +55,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Text
@@ -70,6 +72,8 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.painterResource
@@ -106,6 +110,7 @@ fun PosterWall(
 ) {
     val grid = rememberLazyGridState()
     LaunchedEffect(query) { grid.scrollToItem(0) }
+    var menu by remember { mutableStateOf(false) }
 
     Box(modifier.fillMaxSize().background(Night.Deep)) {
         // The splash's blue, lingering at the top.
@@ -133,9 +138,7 @@ fun PosterWall(
                 UpdateButton(
                     busy = update != DisneyViewModel.Update.Idle,
                     onClick = onUpdate,
-                    onOpenWifi = onOpenWifi,
-                    onAllDebrid = onAllDebrid,
-                    onTmdbKey = onTmdbKey,
+                    onLongClick = { menu = true },
                 )
             }
             UpdateProgress(update)
@@ -181,6 +184,56 @@ fun PosterWall(
             // A locked device has no Settings app: this is the way back to Wi-Fi.
             AnimatedVisibility(visible = !online, enter = fadeIn(), exit = fadeOut()) {
                 Pill("No internet \u00B7 Wi-Fi settings", onClick = onOpenWifi)
+            }
+        }
+
+        SettingsMenu(
+            open = menu,
+            onClose = { menu = false },
+            items = listOf("Wi-Fi" to onOpenWifi, "AllDebrid account" to onAllDebrid, "TMDB key" to onTmdbKey),
+        )
+    }
+}
+
+/**
+ * The update button's long-press menu. It's drawn in the wall itself, not as
+ * a popup window: on a phone, a popup opening under the finger that's still
+ * pressing the button only opened the first time. A tap anywhere else, or
+ * Back, closes it without reaching the posters underneath.
+ */
+@Composable
+private fun BoxScope.SettingsMenu(open: Boolean, onClose: () -> Unit, items: List<Pair<String, () -> Unit>>) {
+    if (open) {
+        BackHandler(onBack = onClose)
+        Box(Modifier.fillMaxSize().pointerInput(Unit) { detectTapGestures { onClose() } })
+    }
+    AnimatedVisibility(
+        visible = open,
+        enter = fadeIn(tween(120)) + scaleIn(tween(120), initialScale = 0.9f, transformOrigin = TransformOrigin(1f, 0f)),
+        exit = fadeOut(tween(90)),
+        modifier = Modifier.align(Alignment.TopEnd).statusBarsPadding().padding(top = 60.dp, end = 14.dp),
+    ) {
+        Column(
+            Modifier
+                .width(220.dp)
+                .clip(RoundedCornerShape(14.dp))
+                .background(Color(0xFF16204A))
+                .border(1.dp, Night.Line, RoundedCornerShape(14.dp))
+                .padding(vertical = 6.dp),
+        ) {
+            items.forEach { (label, action) ->
+                Text(
+                    label,
+                    color = Night.Text,
+                    fontSize = 16.sp,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable {
+                            onClose()
+                            action()
+                        }
+                        .padding(horizontal = 18.dp, vertical = 14.dp),
+                )
             }
         }
     }
@@ -247,52 +300,29 @@ private fun Pill(text: String, onClick: (() -> Unit)? = null) {
 /** Tap: look for new films. Long-press: the few settings a locked device needs. */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun UpdateButton(
-    busy: Boolean,
-    onClick: () -> Unit,
-    onOpenWifi: () -> Unit,
-    onAllDebrid: () -> Unit,
-    onTmdbKey: () -> Unit,
-) {
+private fun UpdateButton(busy: Boolean, onClick: () -> Unit, onLongClick: () -> Unit) {
     val spin = rememberInfiniteTransition(label = "spin")
     val angle by spin.animateFloat(0f, 360f, infiniteRepeatable(tween(900, easing = LinearEasing), RepeatMode.Restart), label = "angle")
-    var menu by remember { mutableStateOf(false) }
-    Box {
-        Box(
-            Modifier
-                .size(46.dp)
-                .clip(CircleShape)
-                .background(Night.Field)
-                .border(1.dp, Night.Line, CircleShape)
-                .combinedClickable(
-                    onClick = onClick,
-                    onLongClick = { menu = true },
-                    onClickLabel = "Look for new films",
-                    onLongClickLabel = "Settings",
-                ),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(
-                Icons.Default.Refresh,
-                contentDescription = "Look for new films",
-                tint = Night.Text,
-                modifier = Modifier.size(22.dp).rotate(if (busy) angle else 0f),
-            )
-        }
-        DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-            DropdownMenuItem(text = { Text("Wi-Fi") }, onClick = {
-                menu = false
-                onOpenWifi()
-            })
-            DropdownMenuItem(text = { Text("AllDebrid account") }, onClick = {
-                menu = false
-                onAllDebrid()
-            })
-            DropdownMenuItem(text = { Text("TMDB key") }, onClick = {
-                menu = false
-                onTmdbKey()
-            })
-        }
+    Box(
+        Modifier
+            .size(46.dp)
+            .clip(CircleShape)
+            .background(Night.Field)
+            .border(1.dp, Night.Line, CircleShape)
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = onLongClick,
+                onClickLabel = "Look for new films",
+                onLongClickLabel = "Settings",
+            ),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            Icons.Default.Refresh,
+            contentDescription = "Look for new films",
+            tint = Night.Text,
+            modifier = Modifier.size(22.dp).rotate(if (busy) angle else 0f),
+        )
     }
 }
 

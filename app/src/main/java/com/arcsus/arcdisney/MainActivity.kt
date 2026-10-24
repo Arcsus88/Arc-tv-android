@@ -32,8 +32,18 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    override fun onStart() {
+        super.onStart()
+        (application as ArcDisneyApp).graph.warmUp()
+    }
+
     override fun onResume() {
         super.onResume()
         Kiosk.lock(this)
+    }
+
+    override fun onStop() {
+        (application as ArcDisneyApp).graph.coolDown()
+        super.onStop()
     }
 }
