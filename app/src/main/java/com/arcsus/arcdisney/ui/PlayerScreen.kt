@@ -11,7 +11,8 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -56,6 +57,11 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.AwaitPointerEventScope
+import androidx.compose.ui.input.pointer.PointerInputChange
+import androidx.compose.ui.input.pointer.PointerInputScope
+import androidx.compose.ui.input.pointer.changedToUp
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
@@ -105,7 +111,8 @@ fun PlayerScreen(
     var buffering by remember { mutableFloatStateOf(0f) }
     var time by remember { mutableLongStateOf(0L) }
     var length by remember { mutableLongStateOf(0L) }
-    var controls by remember { mutableStateOf(true) }
+    // Hidden from the start: a child tapping the film can't pause or skip it (see detectTapOrHold).
+    var controls by remember { mutableStateOf(false) }
     var tracks by remember { mutableStateOf(false) }
     var fill by remember { mutableStateOf(false) }
     var scrub by remember { mutableStateOf<Float?>(null) }
@@ -115,7 +122,12 @@ fun PlayerScreen(
         player.setEventListener { e ->
             when (e.type) {
                 MediaPlayer.Event.Playing -> playing = true
-                MediaPlayer.Event.Paused, MediaPlayer.Event.Stopped -> playing = false
+                MediaPlayer.Event.Paused -> {
+                    playing = false
+                    // Paused by leaving the app, say: the play button is there on the way back.
+                    controls = true
+                }
+                MediaPlayer.Event.Stopped -> playing = false
                 MediaPlayer.Event.Buffering -> buffering = e.buffering
                 MediaPlayer.Event.TimeChanged -> time = e.timeChanged
                 MediaPlayer.Event.LengthChanged -> length = e.lengthChanged
@@ -180,7 +192,16 @@ fun PlayerScreen(
         Modifier
             .fillMaxSize()
             .background(Color.Black)
-            .clickable(remember { MutableInteractionSource() }, indication = null) { controls = !controls },
+            .pointerInput(Unit) {
+                detectTapOrHold(
+                    HOLD_FOR_CONTROLS_MS,
+                    onTap = { controls = false },
+                    onHold = {
+                        controls = true
+                        poke++
+                    },
+                )
+            },
     ) {
         AndroidView(
             factory = { ctx -> VLCVideoLayout(ctx).also { player.attachViews(it, null, true, false) } },
@@ -235,6 +256,38 @@ fun PlayerScreen(
     }
 
     if (tracks) TracksDialog(player) { tracks = false }
+}
+
+/** How long a finger has to stay on the film to bring up the controls. */
+internal const val HOLD_FOR_CONTROLS_MS = 1_500L
+
+/**
+ * Touches on the film, out of a child's reach: a finger held still for
+ * [holdMillis] calls [onHold] as soon as the time is up, while it's still
+ * down; one lifted sooner without moving calls [onTap]. A finger that moves
+ * (a swipe, a second finger, a palm), or a touch a button or the seek bar
+ * takes, is neither.
+ */
+internal suspend fun PointerInputScope.detectTapOrHold(holdMillis: Long, onTap: () -> Unit, onHold: () -> Unit) {
+    awaitEachGesture {
+        // Unconsumed or not: the controls' own buttons take their taps' lifts, so those aren't taps here.
+        val down = awaitFirstDown(requireUnconsumed = false)
+        when (withTimeoutOrNull(holdMillis) { liftedWithoutMoving(down) }) {
+            null -> onHold()
+            true -> onTap()
+            false -> Unit
+        }
+    }
+}
+
+/** True once every finger is up and none moved; false when one moves or something else takes the touch. */
+private suspend fun AwaitPointerEventScope.liftedWithoutMoving(down: PointerInputChange): Boolean {
+    while (true) {
+        val event = awaitPointerEvent()
+        if (event.changes.any { it.isConsumed }) return false
+        if (event.changes.all { it.changedToUp() }) return true
+        if (event.changes.any { (it.position - down.position).getDistance() > viewConfiguration.touchSlop }) return false
+    }
 }
 
 /** The overlay over the film: back, title, fit/fill, tracks, play/pause, skips, the seek bar. */

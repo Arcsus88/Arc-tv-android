@@ -128,6 +128,14 @@ tracks. VLC decodes everything a release might carry (HEVC, TrueHD, DTS).
 VLC is loaded once, as the app starts, and shared by every film. Leaving the
 app pauses the film.
 
+The controls are kept from a child's hands: tapping the film does nothing, so
+it can't be paused or skipped by accident. Holding a finger still on the film
+for a second and a half (`HOLD_FOR_CONTROLS_MS` in `ui/PlayerScreen.kt`)
+brings them up, a tap on the film puts them away, and they fade on their own
+after a few seconds of play. A swipe, a palm or an ordinary long-press doesn't
+count. They're also up whenever the film is paused, so coming back to the app
+finds the play button waiting.
+
 **Worth knowing:** streaming a torrent means the phone downloads from, and
 uploads to, everyone sharing it, and they can see its IP address. In the UK
 that's how copyright letters from ISPs come about. Playing from AllDebrid
@@ -233,6 +241,10 @@ from a published release. They don't check for updates either: that needs
   opened again and again: on the wall alone (a tap elsewhere or Back closes
   it without playing a film), and in the whole app, through first-run setup
   and each screen the menu opens.
+- `ui/PlayerHoldTest`: the player's controls, over the film as the player
+  wires them: taps, an ordinary long-press and a dragged finger leave them
+  hidden; a hold brings them up (without pressing the play button that comes
+  up under the finger), their buttons work, and a tap on the film hides them.
 - `ui/ScreensTest`: the splash, wall, launch, player and Wi-Fi screens rendered on
   the JVM with Robolectric and Roborazzi, into `app/build/screens/` with
   `-Proborazzi.test.record=true`. Posters load from `-DposterDir=…` (TMDB
