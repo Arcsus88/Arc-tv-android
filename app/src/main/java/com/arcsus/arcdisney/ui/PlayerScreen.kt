@@ -81,6 +81,7 @@ import kotlinx.coroutines.delay
 import org.videolan.libvlc.LibVLC
 import org.videolan.libvlc.Media
 import org.videolan.libvlc.MediaPlayer
+import org.videolan.libvlc.interfaces.IVLCVout
 import org.videolan.libvlc.util.VLCVideoLayout
 import java.util.Locale
 
@@ -117,6 +118,22 @@ fun PlayerScreen(
     var fill by remember { mutableStateOf(false) }
     var scrub by remember { mutableStateOf<Float?>(null) }
     var poke by remember { mutableLongStateOf(0L) }
+
+    // The picture: VLC draws the film into this layout's surface.
+    val videoLayout = remember { VLCVideoLayout(context) }
+
+    /**
+     * Hands VLC the picture, unless it has it. The screen going off (the lock
+     * button) destroys the surface, and VLC lets go of the layout along with
+     * it and never picks up the new one: the film came back as sound alone.
+     */
+    fun attachPicture() {
+        if (player.vlcVout.areViewsAttached()) return
+        player.detachViews() // what's left of the last attachment
+        player.attachViews(videoLayout, null, true, false)
+        // Fit/fill went with the last attachment.
+        player.videoScale = if (fill) MediaPlayer.ScaleType.SURFACE_FILL else MediaPlayer.ScaleType.SURFACE_BEST_FIT
+    }
 
     DisposableEffect(url) {
         player.setEventListener { e ->
@@ -170,12 +187,27 @@ fun PlayerScreen(
         }
     }
 
-    // Leaving the app pauses the film.
+    // Leaving the app (or the screen going off) pauses the film; coming back gives VLC the picture again.
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     DisposableEffect(lifecycle) {
-        val observer = LifecycleEventObserver { _, event -> if (event == Lifecycle.Event.ON_STOP) player.pause() }
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_STOP -> player.pause()
+                Lifecycle.Event.ON_START -> attachPicture()
+                else -> Unit
+            }
+        }
+        // Never sound without a picture: if the surface goes while the film plays, it pauses.
+        val surfaceLost = object : IVLCVout.Callback {
+            override fun onSurfacesCreated(vlcVout: IVLCVout) = Unit
+            override fun onSurfacesDestroyed(vlcVout: IVLCVout) = player.pause()
+        }
+        player.vlcVout.addCallback(surfaceLost)
         lifecycle.addObserver(observer)
-        onDispose { lifecycle.removeObserver(observer) }
+        onDispose {
+            lifecycle.removeObserver(observer)
+            player.vlcVout.removeCallback(surfaceLost)
+        }
     }
 
     // Controls fade after a few seconds of play.
@@ -204,7 +236,7 @@ fun PlayerScreen(
             },
     ) {
         AndroidView(
-            factory = { ctx -> VLCVideoLayout(ctx).also { player.attachViews(it, null, true, false) } },
+            factory = { videoLayout.also { attachPicture() } },
             modifier = Modifier.fillMaxSize(),
         )
         LaunchedEffect(fill) {

@@ -126,7 +126,12 @@ which is plenty for one film at a time.
 play/pause, ±10 s, a seek bar, fit/fill, and the release's audio and subtitle
 tracks. VLC decodes everything a release might carry (HEVC, TrueHD, DTS).
 VLC is loaded once, as the app starts, and shared by every film. Leaving the
-app pauses the film.
+app, or the screen going off, pauses the film. The screen going off (the lock
+button) also destroys the surface VLC draws into, and VLC lets go of the
+video view with it and never picks up the new one, so the film used to come
+back as sound alone. The player now gives VLC its view again on the way back,
+and pauses the film if the picture goes while it's playing, so it never plays
+sound without one.
 
 The controls are kept from a child's hands: tapping the film does nothing, so
 it can't be paused or skipped by accident. Holding a finger still on the film
