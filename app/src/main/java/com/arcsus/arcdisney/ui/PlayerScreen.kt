@@ -65,6 +65,7 @@ import androidx.compose.ui.input.pointer.changedToUp
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -76,6 +77,7 @@ import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.compose.currentStateAsState
 import com.arcsus.arcdisney.torrent.StreamStats
 import com.arcsus.arcdisney.ui.theme.Night
 import kotlinx.coroutines.delay
@@ -176,23 +178,7 @@ fun PlayerScreen(
         }
     }
 
-    // Landscape, edge to edge, screen on; put everything back on the way out.
-    val view = LocalView.current
-    DisposableEffect(Unit) {
-        val activity = context.findActivity()
-        val previous = activity?.requestedOrientation
-        activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
-        val window = activity?.window
-        val insets = window?.let { WindowCompat.getInsetsController(it, view) }
-        insets?.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-        insets?.hide(WindowInsetsCompat.Type.systemBars())
-        view.keepScreenOn = true
-        onDispose {
-            view.keepScreenOn = false
-            insets?.show(WindowInsetsCompat.Type.systemBars())
-            activity?.requestedOrientation = previous ?: ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
-        }
-    }
+    PlayerWindow()
 
     // Leaving the app (or the screen going off) pauses the film; coming back gives VLC the picture again.
     val lifecycle = LocalLifecycleOwner.current.lifecycle
@@ -313,6 +299,38 @@ fun PlayerScreen(
     }
 
     if (tracks) TracksDialog(player) { tracks = false }
+}
+
+/**
+ * The player's window: landscape, full screen with no status or navigation
+ * bar, screen kept on; all put back on the way out. Android brings the bars
+ * back when the window loses focus (the screen going off, the lock screen, the
+ * audio and subtitles dialog) and leaves them up, so they're hidden again
+ * each time the window has focus back and each time the app resumes.
+ */
+@Composable
+internal fun PlayerWindow() {
+    val context = LocalContext.current
+    val view = LocalView.current
+    val activity = remember(context) { context.findActivity() }
+    val bars = remember(activity, view) { activity?.window?.let { WindowCompat.getInsetsController(it, view) } }
+    DisposableEffect(activity, bars) {
+        val previous = activity?.requestedOrientation
+        activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+        bars?.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        bars?.hide(WindowInsetsCompat.Type.systemBars())
+        view.keepScreenOn = true
+        onDispose {
+            view.keepScreenOn = false
+            bars?.show(WindowInsetsCompat.Type.systemBars())
+            activity?.requestedOrientation = previous ?: ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+        }
+    }
+    val focused = LocalWindowInfo.current.isWindowFocused
+    val state by LocalLifecycleOwner.current.lifecycle.currentStateAsState()
+    LaunchedEffect(bars, focused, state) {
+        if (focused || state == Lifecycle.State.RESUMED) bars?.hide(WindowInsetsCompat.Type.systemBars())
+    }
 }
 
 /** How long a finger has to stay on the film to bring up the controls. */

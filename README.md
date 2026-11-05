@@ -131,7 +131,9 @@ button) also destroys the surface VLC draws into, and VLC lets go of the
 video view with it and never picks up the new one, so the film used to come
 back as sound alone. The player now gives VLC its view again on the way back,
 and pauses the film if the picture goes while it's playing, so it never plays
-sound without one.
+sound without one. Android also brings the status and navigation bars back
+when the screen goes off (or a dialog takes focus) and leaves them up, so the
+player hides them again whenever its window has focus back or the app resumes.
 
 The controls are kept from a child's hands: tapping the film only shows a tip,
 "Press and hold to show controls", for three seconds (it also shows as the film
@@ -247,6 +249,9 @@ from a published release. They don't check for updates either: that needs
   opened again and again: on the wall alone (a tap elsewhere or Back closes
   it without playing a film), and in the whole app, through first-run setup
   and each screen the menu opens.
+- `ui/PlayerWindowTest`: the player's window on Android 9: no status or
+  navigation bar, still none after Android brings them back (the lock button
+  and coming back, a dialog), and both bars and rotation back on the way out.
 - `ui/PlayerHoldTest`: the player's controls, over the film as the player
   wires them: taps (which show the press-and-hold tip), an ordinary long-press
   and a dragged finger leave them hidden; a hold brings them up (without pressing the play button that comes
