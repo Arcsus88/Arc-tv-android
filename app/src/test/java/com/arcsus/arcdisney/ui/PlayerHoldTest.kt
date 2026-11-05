@@ -12,6 +12,7 @@ import androidx.compose.ui.test.click
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onAllNodesWithContentDescription
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
@@ -39,6 +40,7 @@ class PlayerHoldTest {
     val compose = createComposeRule()
 
     private var controls by mutableStateOf(false)
+    private var tip by mutableStateOf(false)
     private var playPauses = 0
     private var skips = 0
 
@@ -48,9 +50,17 @@ class PlayerHoldTest {
             Modifier
                 .fillMaxSize()
                 .pointerInput(Unit) {
-                    detectTapOrHold(HOLD_FOR_CONTROLS_MS, onTap = { controls = false }, onHold = { controls = true })
+                    detectTapOrHold(
+                        HOLD_FOR_CONTROLS_MS,
+                        onTap = { if (controls) controls = false else tip = true },
+                        onHold = {
+                            controls = true
+                            tip = false
+                        },
+                    )
                 },
         ) {
+            if (tip && !controls) HoldTip()
             if (controls) {
                 PlayerControls(
                     title = "Coco",
@@ -74,16 +84,20 @@ class PlayerHoldTest {
 
     private fun shown() = compose.onAllNodesWithContentDescription("Pause").fetchSemanticsNodes().isNotEmpty()
 
+    private fun tipShown() = compose.onAllNodesWithText("Press and hold to show controls").fetchSemanticsNodes().isNotEmpty()
+
     /** Left of the skip buttons: film, with nothing over it even when the controls are up. */
     private val bare get() = compose.onRoot().fetchSemanticsNode().size.let { Offset(it.width * 0.15f, it.height * 0.5f) }
 
     @Test
-    fun tapsDoNothing() {
+    fun tapsShowTheTipNotTheControls() {
+        assertFalse(tipShown())
         repeat(3) {
             compose.onRoot().performTouchInput { click(center) }
             compose.waitForIdle()
         }
         assertFalse(shown())
+        assertTrue(tipShown())
     }
 
     @Test
@@ -98,6 +112,7 @@ class PlayerHoldTest {
         compose.onRoot().performTouchInput { down(center) }
         compose.mainClock.advanceTimeBy(HOLD_FOR_CONTROLS_MS + 100)
         assertTrue("up while the finger is still down", shown())
+        assertFalse(tipShown())
         // The play button came up under the finger; lifting it doesn't press it.
         compose.onRoot().performTouchInput { up() }
         compose.waitForIdle()

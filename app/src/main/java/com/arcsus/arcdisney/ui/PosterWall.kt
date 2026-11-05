@@ -255,7 +255,7 @@ private fun SearchField(query: String, onQuery: (String) -> Unit, modifier: Modi
         Spacer(Modifier.width(10.dp))
         Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
             if (query.isEmpty()) {
-                Text("Search Disney films", color = Night.Muted, fontSize = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text("Search", color = Night.Muted, fontSize = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
             BasicTextField(
                 value = query,

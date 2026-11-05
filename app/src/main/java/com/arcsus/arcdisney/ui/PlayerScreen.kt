@@ -45,6 +45,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -118,6 +119,9 @@ fun PlayerScreen(
     var fill by remember { mutableStateOf(false) }
     var scrub by remember { mutableStateOf<Float?>(null) }
     var poke by remember { mutableLongStateOf(0L) }
+    // "Press and hold to show controls": as the film starts, and on a tap while the controls are away.
+    var tipAsks by remember { mutableIntStateOf(0) }
+    var tip by remember { mutableStateOf(false) }
 
     // The picture: VLC draws the film into this layout's surface.
     val videoLayout = remember { VLCVideoLayout(context) }
@@ -138,7 +142,10 @@ fun PlayerScreen(
     DisposableEffect(url) {
         player.setEventListener { e ->
             when (e.type) {
-                MediaPlayer.Event.Playing -> playing = true
+                MediaPlayer.Event.Playing -> {
+                    playing = true
+                    if (tipAsks == 0) tipAsks++ // the film's first start
+                }
                 MediaPlayer.Event.Paused -> {
                     playing = false
                     // Paused by leaving the app, say: the play button is there on the way back.
@@ -218,6 +225,14 @@ fun PlayerScreen(
         }
     }
 
+    // The tip stays a few seconds each time it's asked for.
+    LaunchedEffect(tipAsks) {
+        if (tipAsks == 0) return@LaunchedEffect
+        tip = true
+        delay(TIP_MS)
+        tip = false
+    }
+
     BackHandler(onBack = onClose)
 
     Box(
@@ -227,9 +242,10 @@ fun PlayerScreen(
             .pointerInput(Unit) {
                 detectTapOrHold(
                     HOLD_FOR_CONTROLS_MS,
-                    onTap = { controls = false },
+                    onTap = { if (controls) controls = false else tipAsks++ },
                     onHold = {
                         controls = true
+                        tip = false
                         poke++
                     },
                 )
@@ -246,6 +262,15 @@ fun PlayerScreen(
         // VLC reports its cache filling 0-100% at the start and whenever the torrent falls behind.
         if (buffering < 100f) {
             CircularProgressIndicator(color = Color.White, modifier = Modifier.align(Alignment.Center).size(48.dp))
+        }
+
+        AnimatedVisibility(
+            visible = tip && !controls,
+            enter = fadeIn(),
+            exit = fadeOut(),
+            modifier = Modifier.align(Alignment.BottomCenter).safeDrawingPadding().padding(bottom = 28.dp),
+        ) {
+            HoldTip()
         }
 
         AnimatedVisibility(visible = controls, enter = fadeIn(), exit = fadeOut(), modifier = Modifier.fillMaxSize()) {
@@ -292,6 +317,23 @@ fun PlayerScreen(
 
 /** How long a finger has to stay on the film to bring up the controls. */
 internal const val HOLD_FOR_CONTROLS_MS = 1_500L
+
+/** How long the press-and-hold tip stays up. */
+private const val TIP_MS = 3_000L
+
+/** Over the film, bottom centre: how to bring up the controls. */
+@Composable
+internal fun HoldTip() {
+    Text(
+        "Press and hold to show controls",
+        color = Color.White,
+        fontSize = 14.sp,
+        modifier = Modifier
+            .clip(CircleShape)
+            .background(Color.Black.copy(alpha = 0.6f))
+            .padding(horizontal = 18.dp, vertical = 9.dp),
+    )
+}
 
 /**
  * Touches on the film, out of a child's reach: a finger held still for

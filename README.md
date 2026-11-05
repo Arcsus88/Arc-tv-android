@@ -133,8 +133,9 @@ back as sound alone. The player now gives VLC its view again on the way back,
 and pauses the film if the picture goes while it's playing, so it never plays
 sound without one.
 
-The controls are kept from a child's hands: tapping the film does nothing, so
-it can't be paused or skipped by accident. Holding a finger still on the film
+The controls are kept from a child's hands: tapping the film only shows a tip,
+"Press and hold to show controls", for three seconds (it also shows as the film
+starts), so the film can't be paused or skipped by accident. Holding a finger still on the film
 for a second and a half (`HOLD_FOR_CONTROLS_MS` in `ui/PlayerScreen.kt`)
 brings them up, a tap on the film puts them away, and they fade on their own
 after a few seconds of play. A swipe, a palm or an ordinary long-press doesn't
@@ -247,8 +248,8 @@ from a published release. They don't check for updates either: that needs
   it without playing a film), and in the whole app, through first-run setup
   and each screen the menu opens.
 - `ui/PlayerHoldTest`: the player's controls, over the film as the player
-  wires them: taps, an ordinary long-press and a dragged finger leave them
-  hidden; a hold brings them up (without pressing the play button that comes
+  wires them: taps (which show the press-and-hold tip), an ordinary long-press
+  and a dragged finger leave them hidden; a hold brings them up (without pressing the play button that comes
   up under the finger), their buttons work, and a tap on the film hides them.
 - `ui/ScreensTest`: the splash, wall, launch, player and Wi-Fi screens rendered on
   the JVM with Robolectric and Roborazzi, into `app/build/screens/` with

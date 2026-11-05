@@ -57,7 +57,7 @@ class AppMenuTest {
         compose.onNodeWithText("Skip for now").performClick() // Wi-Fi setup
         waitFor("Sign in with AllDebrid")
         compose.onNodeWithText("Skip for now").performClick() // AllDebrid offer
-        waitFor("Search Disney films")
+        waitFor("Search")
 
         repeat(2) {
             openMenu()

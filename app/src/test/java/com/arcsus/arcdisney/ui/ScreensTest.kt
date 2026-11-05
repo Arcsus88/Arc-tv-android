@@ -5,10 +5,14 @@ import android.graphics.drawable.BitmapDrawable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -234,6 +238,18 @@ class ScreensTest {
                 onScrub = {},
                 onScrubEnd = {},
             )
+        }
+    }
+
+    @Test
+    @Config(qualifiers = "w852dp-h393dp-land-xxhdpi")
+    fun playerTip() = shoot("7-player-tip") {
+        Box(
+            Modifier
+                .fillMaxSize()
+                .background(Brush.linearGradient(listOf(Color(0xFF3A2A5C), Color(0xFF0E3B52), Color(0xFF1B1B1B)))),
+        ) {
+            Box(Modifier.align(Alignment.BottomCenter).safeDrawingPadding().padding(bottom = 28.dp)) { HoldTip() }
         }
     }
 
